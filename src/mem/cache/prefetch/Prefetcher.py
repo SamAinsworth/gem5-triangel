@@ -75,6 +75,7 @@ class BasePrefetcher(ClockedObject):
     on_write = Param.Bool(True, "Notify prefetcher on writes")
     on_data = Param.Bool(True, "Notify prefetcher on data accesses")
     on_inst = Param.Bool(True, "Notify prefetcher on instruction accesses")
+    cross_pages = Param.Bool(False, "can cross page boundaries")
     prefetch_on_access = Param.Bool(
         Parent.prefetch_on_access,
         "Notify the hardware prefetcher on every access (not just misses)",
@@ -687,3 +688,70 @@ class PIFPrefetcher(QueuedPrefetcher):
         self.addEvent(
             HWPProbeEventRetiredInsts(self, simObj, "RetiredInstsPC")
         )
+
+class TriageHashedSetAssociative(SetAssociative):
+    type = "TriageHashedSetAssociative"
+    cxx_class = "gem5::prefetch::TriageHashedSetAssociative"
+    cxx_header = "mem/cache/prefetch/triage.hh"
+
+
+class TriagePrefetcher(QueuedPrefetcher):
+    type = "TriagePrefetcher"
+    cxx_class = "gem5::prefetch::Triage"
+    cxx_header = "mem/cache/prefetch/triage.hh"
+
+    # Do not consult stride prefetcher on instruction accesses
+    on_inst = False
+    on_write = False
+    on_miss = True
+    prefetch_on_access = False
+    prefetch_on_pf_hit = True  # TODO: check these!
+    cross_pages = True
+
+    cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
+
+    cache_delay = Param.Unsigned(25, "Time to access L3 cache")
+    training_unit_assoc = Param.Unsigned(
+        64, "Associativity of the training unit"
+    )
+    training_unit_entries = Param.MemorySize(
+        "1024", "Number of entries of the training unit"
+    )
+    training_unit_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.training_unit_assoc,
+            size=Parent.training_unit_entries,
+        ),
+        "Indexing policy of the training unit",
+    )
+    training_unit_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the training unit"
+    )
+
+    address_map_line_assoc = Param.Unsigned(
+        12, "Associativity per line of history"
+    )
+    address_map_actual_entries = Param.MemorySize(
+        "98304", "Number of entries of the History table"
+    )
+    address_map_actual_cache_assoc = Param.Unsigned(
+        96, "Associativity of the History Table"
+    )  # TODO: assert = address_map_line_assoc * cache assoc / 2
+    address_map_rounded_entries = Param.MemorySize(
+        "131072", "Number of entries of the History table"
+    )  # TODO: assert = rnd(address_map_line_assoc) * cache size / 64 / 2
+    address_map_rounded_cache_assoc = Param.Unsigned(
+        128, "Associativity of the History Table"
+    )  # TODO: assert = address_map_line_assoc * cache assoc / 2
+    address_map_cache_indexing_policy = Param.BaseIndexingPolicy(
+        TriageHashedSetAssociative(
+            entry_size=1,
+            assoc=Parent.address_map_rounded_cache_assoc,
+            size=Parent.address_map_rounded_entries,
+        ),
+        "Indexing policy of the PC table",
+    )
+    address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the PC table"
+    )

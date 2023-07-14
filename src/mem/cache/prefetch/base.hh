@@ -287,6 +287,8 @@ class Base : public ClockedObject
     /** Consult prefetcher on instruction accesses? */
     const bool onInst;
 
+    const bool crossPages;
+
     /** Request id for prefetches */
     const RequestorID requestorId;
 
@@ -353,6 +355,8 @@ class Base : public ClockedObject
         /** The number of times a HW-prefetch hits
          * in the Write Buffer (WB). */
         statistics::Scalar pfHitInWB;
+
+        statistics::Scalar metadataAccesses;
 
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */

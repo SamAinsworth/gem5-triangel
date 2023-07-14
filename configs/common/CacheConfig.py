@@ -109,6 +109,32 @@ def config_cache(options, system):
             core.HPI_L2,
             None,
         )
+    elif options.cpu_type == "A510":
+        try:
+            import cores.arm.A510 as core
+        except:
+            print("A510 is unavailable.")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+            core.A510_DCache,
+            core.A510_ICache,
+            core.A510_L2,
+            None,
+        )
+    elif options.cpu_type == "X2":
+        try:
+            import cores.arm.X2 as core
+        except:
+            print("X2 is unavailable.")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+            core.X2_DCache,
+            core.X2_ICache,
+            core.X2_L2,
+            None,
+        )
     else:
         dcache_class, icache_class, l2_cache_class, walk_cache_class = (
             L1_DCache,
@@ -119,6 +145,9 @@ def config_cache(options, system):
 
         if get_runtime_isa() in [ISA.X86, ISA.RISCV]:
             walk_cache_class = PageTableWalkerCache
+    # For L3
+    if options.pl2sl3cache:
+        l3_cache_class = L3Cache
 
     # Set the cache line size of the system
     system.cache_line_size = options.cacheline_size
@@ -134,13 +163,24 @@ def config_cache(options, system):
         # Provide a clock for the L2 and the L1-to-L2 bus here as they
         # are not connected using addTwoLevelCacheHierarchy. Use the
         # same clock as the CPUs.
-        system.l2 = l2_cache_class(
-            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
-        )
+        system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain)
 
         system.tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
         system.l2.cpu_side = system.tol2bus.mem_side_ports
         system.l2.mem_side = system.membus.cpu_side_ports
+
+    if options.pl2sl3cache:
+        # Provide a clock for the L3 and the L2-to-L3 bus here as they
+        # are not connected using addTwoLevelCacheHierarchy. Use the
+        # same clock as the CPUs.
+        system.l3 = l3_cache_class(
+            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l3", options)
+        )
+
+        # TODO: config for L3 croassbar?
+        system.tol3bus = L2XBar(clk_domain=system.cpu_clk_domain)
+        system.l3.cpu_side = system.tol3bus.mem_side_ports
+        system.l3.mem_side = system.membus.cpu_side_ports
 
     if options.memchecker:
         system.memchecker = MemChecker()
@@ -204,11 +244,63 @@ def config_cache(options, system):
                     ExternalCache("cpu%d.icache" % i),
                     ExternalCache("cpu%d.dcache" % i),
                 )
+        elif options.pl2sl3cache:
+            icache = icache_class()
+            dcache = dcache_class()
+            l2_cache = l2_cache_class(
+                prefetcher=TriagePrefetcher(
+                    cachetags=system.l3.tags,
+                    cache_delay=20,
+                    address_map_actual_entries="196608",
+                    address_map_actual_cache_assoc=96,
+                    address_map_rounded_entries="262144",
+                    address_map_rounded_cache_assoc=128,
+                )
+            )
+            # If we have a walker cache specified, instantiate two
+            # instances here
+            if walk_cache_class:
+                iwalkcache = walk_cache_class()
+                dwalkcache = walk_cache_class()
+            else:
+                iwalkcache = None
+                dwalkcache = None
+            if options.memchecker:
+                dcache_mon = MemCheckerMonitor(warn_only=True)
+                dcache_real = dcache
+
+                # Do not pass the memchecker into the constructor of
+                # MemCheckerMonitor, as it would create a copy; we require
+                # exactly one MemChecker instance.
+                dcache_mon.memchecker = system.memchecker
+
+                # Connect monitor
+                dcache_mon.mem_side = dcache.cpu_side
+
+                # Let CPU connect to monitors
+                dcache = dcache_mon
+            # When connecting the caches, the clock is also inherited
+            # from the CPU in question
+            system.cpu[i].addTwoLevelCacheHierarchy(
+                icache, dcache, l2_cache, iwalkcache, dwalkcache
+            )
+
+            if options.memchecker:
+                # The mem_side ports of the caches haven't been connected yet.
+                # Make sure connectAllPorts connects the right objects.
+                system.cpu[i].dcache = dcache_real
+                system.cpu[i].dcache_mon = dcache_mon
 
         system.cpu[i].createInterruptController()
         if options.l2cache:
             system.cpu[i].connectAllPorts(
                 system.tol2bus.cpu_side_ports,
+                system.membus.cpu_side_ports,
+                system.membus.mem_side_ports,
+            )
+        elif options.pl2sl3cache:
+            system.cpu[i].connectAllPorts(
+                system.tol3bus.cpu_side_ports,
                 system.membus.cpu_side_ports,
                 system.membus.mem_side_ports,
             )

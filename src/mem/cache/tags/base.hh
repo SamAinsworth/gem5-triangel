@@ -95,10 +95,10 @@ class BaseTags : public ClockedObject
     const unsigned warmupBound;
     /** Marked true when the cache is warmed up. */
     bool warmedUp;
-
+public:
     /** the number of blocks in the cache */
     const unsigned numBlocks;
-
+protected:
     /** The data blocks, 1 per cache block. */
     std::unique_ptr<uint8_t[]> dataBlks;
 

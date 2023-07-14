@@ -39,7 +39,7 @@ template<class Entry>
 AssociativeSet<Entry>::AssociativeSet(int assoc, int num_entries,
         BaseIndexingPolicy *idx_policy, replacement_policy::Base *rpl_policy,
         Entry const &init_value)
-  : associativity(assoc), numEntries(num_entries), indexingPolicy(idx_policy),
+  : associativity(assoc),allocAssoc(assoc), numEntries(num_entries), indexingPolicy(idx_policy),
     replacementPolicy(rpl_policy), entries(numEntries, init_value)
 {
     fatal_if(!isPowerOf2(num_entries), "The number of entries of an "
@@ -85,8 +85,9 @@ AssociativeSet<Entry>::findVictim(Addr addr)
     // Get possible entries to be victimized
     const std::vector<ReplaceableEntry*> selected_entries =
         indexingPolicy->getPossibleEntries(addr);
+     const std::vector<ReplaceableEntry*> slice = std::vector<ReplaceableEntry*>(selected_entries.begin(), selected_entries.begin()+getWayAllocationMax());
     Entry* victim = static_cast<Entry*>(replacementPolicy->getVictim(
-                            selected_entries));
+                            slice));
     // There is only one eviction for this replacement
     invalidate(victim);
     return victim;
@@ -99,10 +100,11 @@ AssociativeSet<Entry>::getPossibleEntries(const Addr addr) const
 {
     std::vector<ReplaceableEntry *> selected_entries =
         indexingPolicy->getPossibleEntries(addr);
-    std::vector<Entry *> entries(selected_entries.size(), nullptr);
+         const std::vector<ReplaceableEntry*> slice = std::vector<ReplaceableEntry*>(selected_entries.begin(), selected_entries.begin()+getWayAllocationMax());
+    std::vector<Entry *> entries(slice.size(), nullptr);
 
     unsigned int idx = 0;
-    for (auto &entry : selected_entries) {
+    for (auto &entry : slice) {
         entries[idx++] = static_cast<Entry *>(entry);
     }
     return entries;

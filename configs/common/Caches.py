@@ -78,6 +78,25 @@ class L2Cache(Cache):
     write_buffers = 8
 
 
+class L3Cache(Cache):
+    assoc = 16
+    tag_latency = 20
+    data_latency = 20
+    response_latency = 20
+    mshrs = 36
+    tgts_per_mshr = 12
+    write_buffers = 8
+    # prefetcher = TriangelPrefetcher(
+    #   cache_delay=20,
+    #    address_map_actual_entries="196608",
+    #    triage_mode=False,
+    #   address_map_actual_cache_assoc=96,
+    #    address_map_rounded_entries="262144",
+    #    address_map_rounded_cache_assoc=128,
+    # )
+    prefetch_on_pf_hit = True
+
+
 class IOCache(Cache):
     assoc = 8
     tag_latency = 50

@@ -96,7 +96,7 @@ Base::PrefetchListener::notify(const PacketPtr &pkt)
 Base::Base(const BasePrefetcherParams &p)
     : ClockedObject(p), listeners(), cache(nullptr), blkSize(p.block_size),
       lBlkSize(floorLog2(blkSize)), onMiss(p.on_miss), onRead(p.on_read),
-      onWrite(p.on_write), onData(p.on_data), onInst(p.on_inst),
+      onWrite(p.on_write), onData(p.on_data), onInst(p.on_inst), crossPages(p.cross_pages),
       requestorId(p.sys->getRequestorId(this)),
       pageBytes(p.page_bytes),
       prefetchOnAccess(p.prefetch_on_access),
@@ -124,6 +124,8 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
         "demands not covered by prefetchs"),
     ADD_STAT(pfIssued, statistics::units::Count::get(),
         "number of hwpf issued"),
+    ADD_STAT(metadataAccesses, statistics::units::Count::get(),
+        "accesses to history table in cache"),
     ADD_STAT(pfUnused, statistics::units::Count::get(),
              "number of HardPF blocks evicted w/o reference"),
     ADD_STAT(pfUseful, statistics::units::Count::get(),
