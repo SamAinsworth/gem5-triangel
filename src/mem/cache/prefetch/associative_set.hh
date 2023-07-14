@@ -49,12 +49,15 @@ class AssociativeSet
 
     /** Associativity of the container */
     const int associativity;
+    int allocAssoc;
     /**
      * Total number of entries, entries are organized in sets of the provided
      * associativity. The number of associative sets is obtained by dividing
      * numEntries by associativity.
      */
+  public:
     const int numEntries;
+  private:
     /** Pointer to the indexing policy */
     BaseIndexingPolicy* const indexingPolicy;
     /** Pointer to the replacement policy */
@@ -113,6 +116,20 @@ class AssociativeSet
      * @param entry pointer to the container entry to be inserted
      */
     void insertEntry(Addr addr, bool is_secure, Entry* entry);
+
+    void setWayAllocationMax(int ways)
+    {
+        allocAssoc = ways;
+    }
+
+    /**
+     * Get the way allocation mask limit.
+     * @return The maximum number of ways available for replacement.
+     */
+    int getWayAllocationMax() const
+    {
+        return allocAssoc;
+    }
 
     /**
      * Invalidate an entry and its respective replacement data.

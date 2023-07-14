@@ -342,9 +342,10 @@ class BaseCache : public ClockedObject
     /** Write/writeback buffer */
     WriteQueue writeBuffer;
 
+  public:
     /** Tag and data Storage */
     BaseTags *tags;
-
+  protected:
     /** Compression method being used. */
     compression::Base* compressor;
 

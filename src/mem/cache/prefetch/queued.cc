@@ -215,7 +215,7 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
             }
         }
 
-        bool can_cross_page = (mmu != nullptr);
+        bool can_cross_page = (mmu != nullptr) || crossPages;
         if (can_cross_page || samePage(addr_prio.first, pfi.getAddr())) {
             PrefetchInfo new_pfi(pfi,addr_prio.first);
             statsQueued.pfIdentified++;
@@ -414,7 +414,7 @@ Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
     Addr target_paddr;
     bool has_target_pa = false;
     RequestPtr translation_req = nullptr;
-    if (samePage(orig_addr, new_pfi.getAddr())) {
+    if (samePage(orig_addr, new_pfi.getAddr()) || crossPages) {
         if (useVirtualAddresses) {
             // if we trained with virtual addresses,
             // compute the target PA using the original PA and adding the
@@ -462,7 +462,7 @@ Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
     /* Create the packet and find the spot to insert it */
     DeferredPacket dpp(this, new_pfi, 0, priority);
     if (has_target_pa) {
-        Tick pf_time = curTick() + clockPeriod() * latency;
+        Tick pf_time = curTick() + clockPeriod() * priority;
         dpp.createPkt(target_paddr, blkSize, requestorId, tagPrefetch,
                       pf_time);
         DPRINTF(HWPrefetch, "Prefetch queued. "

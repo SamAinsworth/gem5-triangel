@@ -70,7 +70,8 @@ def setCPUClass(options):
 
     TmpClass, test_mem_mode = getCPUClass(options.cpu_type)
     CPUClass = None
-    if TmpClass.require_caches() and not options.caches and not options.ruby:
+
+    if TmpClass.require_caches() and not options.caches and not options.ruby and not options.pl2sl3cache: 
         fatal(f"{options.cpu_type} must be used with caches")
 
     if options.checkpoint_restore != None:

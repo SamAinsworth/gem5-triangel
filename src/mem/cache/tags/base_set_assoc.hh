@@ -173,9 +173,12 @@ class BaseSetAssoc : public BaseTags
         const std::vector<ReplaceableEntry*> entries =
             indexingPolicy->getPossibleEntries(addr);
 
+        assert(getWayAllocationMax() <= entries.size());
+        const std::vector<ReplaceableEntry*> slice = std::vector<ReplaceableEntry*>(entries.begin(), entries.begin()+getWayAllocationMax());
+
         // Choose replacement victim from replacement candidates
         CacheBlk* victim = static_cast<CacheBlk*>(replacementPolicy->getVictim(
-                                entries));
+                                slice));
 
         // There is only one eviction for this replacement
         evict_blks.push_back(victim);
