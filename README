@@ -1,3 +1,12 @@
+Example usage:
+
+```
+$ build/ARM/gem5.opt --cpu-type=X2 --pl2sl3cache ...
+```
+Prefetcher is enabled in CacheConfig.py, and currently set on the L2 cache if an L3 cache is present, with max size half the L3 cache.
+
+--------------------------------
+
 This is the gem5 simulator.
 
 The main website can be found at http://www.gem5.org
