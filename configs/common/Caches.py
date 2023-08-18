@@ -59,24 +59,42 @@ class L1Cache(Cache):
 
 
 class L1_ICache(L1Cache):
+    mshrs = 16
+    size = '64kB'
+    assoc = 4
     is_read_only = True
     # Writeback clean lines as well
     writeback_clean = True
 
 
 class L1_DCache(L1Cache):
-    pass
+    tag_latency = 4
+    data_latency = 4
+    response_latency = 4
+    mshrs = 16
+    size = '64kB'
+    assoc = 4
+    write_buffers = 32
+    prefetch_on_access = True
+    #prefetcher = StridePrefetcher(degree=8, latency = 1)    
+    # Simple stride prefetcher
 
 
 class L2Cache(Cache):
+    tag_latency = 9
+    data_latency = 9
+    response_latency = 9
+    mshrs = 32
+    tgts_per_mshr = 8
+    size = '512kB'
     assoc = 8
-    tag_latency = 20
-    data_latency = 20
-    response_latency = 20
-    mshrs = 20
-    tgts_per_mshr = 12
     write_buffers = 8
-
+    prefetch_on_pf_hit = True
+    #prefetcher = TriangelPrefetcher(cache_delay=9, triage_mode = False, address_map_actual_entries="49152", address_map_actual_cache_assoc=48,address_map_rounded_entries="65536",address_map_rounded_cache_assoc=64)
+    # Simple stride prefetcher
+    #prefetcher = StridePrefetcher(degree=8, latency = 1)
+    tags = BaseSetAssoc()
+    replacement_policy = LRURP()
 
 class L3Cache(Cache):
     assoc = 16

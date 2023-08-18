@@ -60,9 +60,10 @@ namespace prefetch
 Triage::Triage(
     const TriagePrefetcherParams &p)
   : Queued(p),
-//    degree(p.degree),
+    degree(p.degree),
     cachetags(p.cachetags),
     cacheDelay(p.cache_delay),
+    store_unreliable(p.store_unreliable),
     max_size(p.address_map_actual_entries),
     size_increment(p.address_map_actual_entries/(p.address_map_actual_cache_assoc/p.address_map_line_assoc)),
     global_timestamp(0),
@@ -70,6 +71,7 @@ Triage::Triage(
     target_size(0),
     historyLineAssoc(p.address_map_line_assoc),
     maxLineAssoc(p.address_map_actual_cache_assoc),
+    hawkeyeThreshold(p.hawkeye_threshold),
     bl(),
     trainingUnit(p.training_unit_assoc, p.training_unit_entries,
                  p.training_unit_indexing_policy,
@@ -80,6 +82,12 @@ Triage::Triage(
                           p.address_map_cache_replacement_policy,
                           AddressMapping())
 {
+	for(int x=0;x<64;x++) {
+		hawksets[x].sampleHistory=p.sample_history;
+		hawksets[x].sampleTwoHistory=p.sample_two_history;
+		hawksets[x].setMask = p.address_map_rounded_entries/ hawksets[x].maxElems - 1;
+		hawksets[x].reset();
+	}
 	addressMappingCache.setWayAllocationMax(0);
 	assert(cachetags->numBlocks * historyLineAssoc == max_size * 2);
 	assert(cachetags->getWayAllocationMax() * historyLineAssoc == maxLineAssoc * 2);
@@ -110,11 +118,19 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     Addr target = 0;
 
 
+    bool temporal = true;
+    bool sequential = true;
+
 
     if (entry != nullptr) {
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
         index = entry->lastAddress;
+        Addr prev = entry->lastLastAddress;
+            
+    	for(int x=0; x<64; x++)hawksets[x].add(addr,index,prev,pc,&trainingUnit);
+        temporal = entry->temporal>=hawkeyeThreshold;
+        sequential = entry->sequence>=hawkeyeThreshold;
 
         if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
 
@@ -131,7 +147,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     global_timestamp++;
 
 
-    if(correlated_addr_found) {
+    if(correlated_addr_found && ((temporal && sequential) || store_unreliable)) {
         int add = bloom_add(&bl, &addr, sizeof(Addr));
         if(!add) target_size++;
    	while(target_size > current_size
@@ -166,15 +182,17 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     	global_timestamp=0;
     	bloom_reset(&bl);
     }
+    
+    if((!temporal || !sequential) && !store_unreliable) return;
 
     if (correlated_addr_found && (addressMappingCache.getWayAllocationMax()>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false);
+	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal);
 	if(mapping == nullptr) {
-        	mapping = getHistoryEntry(index, is_secure,true,false);
+        	mapping = getHistoryEntry(index, is_secure,true,false,temporal);
         	mapping->address = target;
-        	mapping->confident = true;
+        	mapping->confident = false;
         }
         assert(mapping != nullptr);
         bool confident = mapping->address == target;
@@ -186,17 +204,17 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     }
 
     if(target != 0 && (addressMappingCache.getWayAllocationMax()>0)) {
-  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true);
+  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
-     	 unsigned max = 1;
-   	 while (pf_target != nullptr && deg < max) //TODO: and confident? not clear from paper.
+     	 unsigned max = degree;
+   	 while (pf_target != nullptr && deg < max) //TODO: and confident? not clear from paper. public implementation suggests no
    	 {
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
     		addresses.push_back(AddrPriority(pf_target->address << lBlkSize, delay));
     		delay += cacheDelay;
     		deg++;
-    		if(deg<max) pf_target = getHistoryEntry(pf_target->address, is_secure,false,true);
+    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(pf_target->address, is_secure,false,true,temporal);
 
    	 }
     }
@@ -210,7 +228,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 }
 
 Triage::AddressMapping*
-Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly)
+Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool temporal)
 {
 
     AddressMapping *ps_entry =
@@ -218,13 +236,14 @@ Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly)
     if(readonly || !add) prefetchStats.metadataAccesses++;
     if (ps_entry != nullptr) {
         // A PS-AMC line already exists
-        addressMappingCache.accessEntry(ps_entry);
+        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0); //Higher weight is higher priority.
     } else {
         if(!add) return nullptr;
         ps_entry = addressMappingCache.findVictim(paddr);
         assert(ps_entry != nullptr);
 	assert(!ps_entry->isValid());
         addressMappingCache.insertEntry(paddr, is_secure, ps_entry);
+        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0);
     }
 
     return ps_entry;
@@ -263,9 +282,11 @@ TriageHashedSetAssociative::extractTag(const Addr addr) const
     Addr offset = addr >> tagShift;
     int result = 0;
 
-    for(int x=0; x<64-tagShift; x+=7) {
-       result ^= (offset & 127);
-       offset = offset >> 7;
+    const int shiftwidth=10;
+
+    for(int x=0; x<64-tagShift; x+=shiftwidth) {
+       result ^= (offset & ((1<<shiftwidth)-1));
+       offset = offset >> shiftwidth;
     }
     return result;
 }

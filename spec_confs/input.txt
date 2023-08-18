@@ -1,0 +1,27 @@
+astar: 
+bwaves:  
+bzip2: 
+cactusADM: 
+calculix: 
+dealII:
+gamess: cytosine.2.config
+gcc: 
+GemsFDTD: 
+gobmk: 13x13.tst
+gromacs:
+h264ref:
+hmmer:
+lbm:
+leslie3d: leslie3d.in
+mcf:
+milc: su3imp.in
+namd: 
+omnetpp: 
+povray:
+sjeng:
+soplex:
+sphinx3:
+tonto:
+wrf:
+xalanc: 
+zeusmp: 

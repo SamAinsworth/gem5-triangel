@@ -1,0 +1,19 @@
+perlbench:
+gcc: 
+mcf: 
+omnetpp: 
+x264:
+deepsjeng: 
+leela:
+exchange2: 
+xz: 
+bwaves: bwaves_1.in
+cactuBSSN: 
+lbm:
+wrf: 
+cam4: 
+pop2: 
+imagick: 
+nab: 
+fotonik3d: 
+roms: ocean_benchmark3.in

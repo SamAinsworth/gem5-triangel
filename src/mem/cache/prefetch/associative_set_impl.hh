@@ -79,6 +79,15 @@ AssociativeSet<Entry>::accessEntry(Entry *entry)
 }
 
 template<class Entry>
+void
+AssociativeSet<Entry>::weightedAccessEntry(Entry *entry, int weight)
+{
+    gem5::replacement_policy::WeightedLRU* wlru = dynamic_cast<gem5::replacement_policy::WeightedLRU*>(replacementPolicy);
+    if(wlru) wlru->touch(entry->replacementData, weight);
+    else accessEntry(entry);
+}
+
+template<class Entry>
 Entry*
 AssociativeSet<Entry>::findVictim(Addr addr)
 {

@@ -1,0 +1,29 @@
+astar: BigLakes2048.cfg
+bwaves:  
+bzip2: input.source 280
+cactusADM: benchADM.par
+calculix: -i hyperviscoplastic
+dealII: 23
+gamess: 
+gcc: 166.i
+GemsFDTD: 
+gobmk: --quiet --mode gtp
+gromacs: -silent -deffnm gromacs -nice 0
+h264ref: -d foreman_ref_encoder_baseline.cfg
+hmmer: nph3.hmm swiss41
+lbm: 3000 reference.dat 0 0 100_100_130_ldc.of
+leslie3d:
+libquantum: 1397 8
+mcf: inp.in
+milc: 
+namd: --input namd.input --iterations 38 --output namd.out
+omnetpp: omnetpp.ini
+perlbench: -I./lib checkspam.pl 2500 5 25 11 150 1 1 1 1
+povray: SPEC-benchmark-ref.ini
+sjeng: ref.txt
+soplex: "-s1 -e -m45000 pds-50.mps"
+sphinx3: ctlfile . args.an4
+tonto: 
+wrf: 
+xalancbmk: -v t5.xml xalanc.xsl
+zeusmp: 

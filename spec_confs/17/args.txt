@@ -1,0 +1,20 @@
+bwaves	:	
+mcf	:	 inp.in
+cactuBSSN	:	spec_ref.par
+lbm	:	2000 reference.dat 0 0 200_200_260_ldc.of
+omnetpp	:	 -c General -r 0
+wrf	:	
+xalancbmk	:	-v t5.xml xalanc.xsl
+cam4	:	
+pop2	:	
+deepsjeng	:	ref.txt
+imagick	:	-limit disk 0 refspeed_input.tga -resize 817% -rotate -2.76 -shave 540x375 -alpha remove -auto-level -contrast-stretch 1x1% -colorspace Lab -channel R -equalize +channel -colorspace sRGB -define histogram:unique-colors=false -adaptive-blur 0x5 -despeckle -auto-gamma -adaptive-sharpen 55 -enhance -brightness-contrast 10x10 -resize 30% refspeed_output.tga
+leela	:	 ref.sgf
+nab	:	3j1n 20140317 220
+exchange2	:	6
+fotonik3d	:	
+roms	:	
+xz	:	cpu2006docs.tar.xz 6643 055ce243071129412e9dd0b3b69a21654033a9b723d874b2015c774fac1553d9713be561ca86f74e4f16f22e664fc17a79f30caa5ad2c04fbc447549c2810fae 1036078272 1111795472 4
+perlbench	: -I./lib checkspam.pl 2500 5 25 11 150 1 1 1 1
+gcc	: gcc-pp.c -O5 -fipa-pta -o gcc-pp.opts-O5_-fipa-pta.s
+

@@ -242,10 +242,10 @@ def scriptCheckpoints(options, maxtick, cptdir):
         period = int(period)
         num_checkpoints = 0
 
-        exit_event = m5.simulate(when - m5.curTick())
+        exit_event = m5.simulate(when)
         exit_cause = exit_event.getCause()
         while exit_cause == "checkpoint":
-            exit_event = m5.simulate(when - m5.curTick())
+            exit_event = m5.simulate(when)
             exit_cause = exit_event.getCause()
 
         if exit_cause == "simulate() limit reached":
@@ -268,7 +268,7 @@ def scriptCheckpoints(options, maxtick, cptdir):
                 exit_cause = exit_event.getCause()
                 sim_ticks += period
                 while exit_event.getCause() == "checkpoint":
-                    exit_event = m5.simulate(sim_ticks - m5.curTick())
+                    exit_event = m5.simulate(sim_ticks)
                 if exit_event.getCause() == "simulate() limit reached":
                     m5.checkpoint(joinpath(cptdir, "cpt.%d"))
                     num_checkpoints += 1
@@ -475,7 +475,7 @@ def run(options, root, testsys, cpu_class):
     if options.fast_forward and options.checkpoint_restore != None:
         fatal("Can't specify both --fast-forward and --checkpoint-restore")
 
-    if options.standard_switch and not options.caches:
+    if options.standard_switch and not (options.caches or options.pl2sl3cache):
         fatal("Must specify --caches when using --standard-switch")
 
     if options.standard_switch and options.repeat_switch:
@@ -763,6 +763,7 @@ def run(options, root, testsys, cpu_class):
                 "Simulation ends instruction count:%d"
                 % (testsys.switch_cpus_1[0].max_insts_any_thread)
             )
+            m5.stats.reset()
             m5.switchCpus(testsys, switch_cpu_list1)
 
     # If we're taking and restoring checkpoints, use checkpoint_dir

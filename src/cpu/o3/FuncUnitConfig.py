@@ -45,12 +45,12 @@ from m5.objects.FuncUnit import *
 
 class IntALU(FUDesc):
     opList = [OpDesc(opClass="IntAlu")]
-    count = 6
+    count = 4
 
 
 class IntMultDiv(FUDesc):
     opList = [
-        OpDesc(opClass="IntMult", opLat=3),
+        OpDesc(opClass="IntMult", opLat=2),
         OpDesc(opClass="IntDiv", opLat=20, pipelined=False),
     ]
 
@@ -68,11 +68,11 @@ class FP_ALU(FUDesc):
 
 class FP_MultDiv(FUDesc):
     opList = [
-        OpDesc(opClass="FloatMult", opLat=4),
+        OpDesc(opClass="FloatMult", opLat=3),
         OpDesc(opClass="FloatMultAcc", opLat=5),
         OpDesc(opClass="FloatMisc", opLat=3),
-        OpDesc(opClass="FloatDiv", opLat=12, pipelined=False),
-        OpDesc(opClass="FloatSqrt", opLat=24, pipelined=False),
+        OpDesc(opClass="FloatDiv", opLat=1, pipelined=False),
+        OpDesc(opClass="FloatSqrt", opLat=12, pipelined=False),
     ]
     count = 2
 
@@ -118,7 +118,7 @@ class PredALU(FUDesc):
 
 class ReadPort(FUDesc):
     opList = [OpDesc(opClass="MemRead"), OpDesc(opClass="FloatMemRead")]
-    count = 0
+    count = 1
 
 
 class WritePort(FUDesc):
@@ -133,7 +133,7 @@ class RdWrPort(FUDesc):
         OpDesc(opClass="FloatMemRead"),
         OpDesc(opClass="FloatMemWrite"),
     ]
-    count = 4
+    count = 2
 
 
 class IprPort(FUDesc):

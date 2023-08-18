@@ -1,0 +1,19 @@
+bwaves	:	bwaves_1.in
+mcf	:	
+cactuBSSN	:	
+lbm	:	
+omnetpp	:	
+wrf	:	
+xalancbmk	:	
+cam4	:	
+pop2	:	
+deepsjeng	:	
+imagick	:	
+leela	:	
+nab	:	
+exchange2	:	
+fotonik3d	:	
+roms	:	ocean_benchmark3.in
+xz	:	
+perlbench	:
+gcc	:

@@ -87,7 +87,7 @@ class DefaultX86FUPool(FUPool):
 
 class X86O3CPU(BaseO3CPU, X86CPU):
     mmu = X86MMU()
-    needsTSO = True
+    needsTSO = False
 
     # For x86, each CC reg is used to hold only a subset of the
     # flags, so we need 4-5 times the number of CC regs as
@@ -106,3 +106,4 @@ class X86O3CPU(BaseO3CPU, X86CPU):
 
 class X86MinorCPU(BaseMinorCPU, X86CPU):
     mmu = X86MMU()
+    fuPool = DefaultX86FUPool()

@@ -59,7 +59,7 @@ class Triage : public Queued
 {
 
     /** Number of maximum prefetches requests created when predicting */
-   // const unsigned degree; //TODO: currently ignored
+    const unsigned degree;
 
     /**
      * Training Unit Entry datatype, it holds the last accessed address and
@@ -68,6 +68,7 @@ class Triage : public Queued
 
     BaseTags* cachetags;
     const unsigned cacheDelay;
+    const bool store_unreliable;
 
 
     const int max_size;
@@ -77,25 +78,109 @@ class Triage : public Queued
     int target_size;
     const int historyLineAssoc;
     const int maxLineAssoc;
+    
+    const int hawkeyeThreshold;
 
     bloom bl;
-
+    
     struct TrainingUnitEntry : public TaggedEntry
     {
         Addr lastAddress;
+        Addr lastLastAddress;
+        SatCounter8  temporal;
+        SatCounter8 sequence;
 
-        TrainingUnitEntry() : lastAddress(0)
+        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), temporal(4,8), sequence(4,8)
         {}
 
         void
         invalidate() override
         {
         	TaggedEntry::invalidate();
+        	lastLastAddress=0;
                 lastAddress = 0;
+                temporal.reset();
+                sequence.reset();
         }
+        
+        
     };
     /** Map of PCs to Training unit entries */
     AssociativeSet<TrainingUnitEntry> trainingUnit;
+    
+    struct Hawkeye
+    {
+      int iteration;
+      uint64_t set;
+      uint64_t setMask; // address_map_rounded_entries/ maxElems - 1
+      Addr logaddrs[128];
+      Addr loglastaddrs[128];
+      Addr loglastlastaddrs[128];
+      Addr logpcs[128];
+      int logsize[128];
+      int maxElems = 8;
+      bool sampleHistory;
+      bool sampleTwoHistory;
+      
+      Hawkeye(uint64_t mask, bool history) : iteration(0), set(0), setMask(mask),sampleHistory(history)
+        {
+           reset();
+        }
+        
+      Hawkeye() : iteration(0), set(0)
+        {       }
+      
+      void reset() {
+        iteration=0;
+        for(int x=0;x<128;x++) logsize[x]=0;
+        set = random_mt.random<uint64_t>(0,setMask);
+      }
+      
+      void add(Addr addr, Addr lastAddr, Addr lastLastAddr, Addr pc,AssociativeSet<TrainingUnitEntry>* trainer) {
+        if((addr & setMask) != set) return;
+        logaddrs[iteration]=addr;
+        loglastaddrs[iteration] = lastAddr;
+        loglastlastaddrs[iteration] = lastLastAddr;
+        logpcs[iteration]=pc;
+
+        
+        TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
+        if(entry!=nullptr) {
+          for(int y=iteration-1;y>=-1;y--) {
+               if(y<0 || logsize[y] == maxElems) {
+                 //no match
+                 entry->temporal--;
+                 break;
+               }
+               if(addr==logaddrs[y]) {
+                 //found a match
+                   entry->temporal++;
+                   for(int z=y;z<iteration;z++) {
+                   	logsize[z]++;
+                   }
+                 	
+                   if(lastAddr==loglastaddrs[y] || (sampleTwoHistory 
+                   && (lastAddr==loglastlastaddrs[y] || lastLastAddr==loglastaddrs[y]))
+                           || !sampleHistory) {
+                       entry->sequence++;
+                   }  else entry->sequence--;
+                break;
+               }
+            }            
+        }
+        iteration++;
+        if(iteration==128) {
+        	reset();
+        }
+      }
+      
+    };
+
+
+
+    
+    
+    Hawkeye hawksets[64];
 
     /** Address Mapping entry, holds an address and a confidence counter */
     struct AddressMapping : public TaggedEntry
@@ -118,7 +203,7 @@ class Triage : public Queued
     /** History mappings table */
     AssociativeSet<AddressMapping> addressMappingCache;
 
-    AddressMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly);
+    AddressMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool temporal);
 
   public:
     Triage(const TriagePrefetcherParams &p);

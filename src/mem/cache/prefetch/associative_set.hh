@@ -30,6 +30,7 @@
 #define __CACHE_PREFETCH_ASSOCIATIVE_SET_HH__
 
 #include "mem/cache/replacement_policies/base.hh"
+#include "mem/cache/replacement_policies/weighted_lru_rp.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
 #include "mem/cache/tags/tagged_entry.hh"
 
@@ -93,6 +94,8 @@ class AssociativeSet
      * @param entry the accessed entry
      */
     void accessEntry(Entry *entry);
+    
+    void weightedAccessEntry(Entry *entry, int weight);
 
     /**
      * Find a victim to be replaced

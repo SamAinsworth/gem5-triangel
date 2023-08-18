@@ -122,19 +122,19 @@ def config_cache(options, system):
             core.A510_L2,
             None,
         )
-    elif options.cpu_type == "X2":
-        try:
-            import cores.arm.X2 as core
-        except:
-            print("X2 is unavailable.")
-            sys.exit(1)
+    #elif options.cpu_type == "X2":
+    #    try:
+    #        import cores.arm.X2 as core
+    #    except:
+    #        print("X2 is unavailable.")
+    #        sys.exit(1)
 
-        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
-            core.X2_DCache,
-            core.X2_ICache,
-            core.X2_L2,
-            None,
-        )
+     #   dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+     #       core.X2_DCache,
+     #       core.X2_ICache,
+     #       core.X2_L2,
+     #       None,
+     #   )
     else:
         dcache_class, icache_class, l2_cache_class, walk_cache_class = (
             L1_DCache,
@@ -247,16 +247,31 @@ def config_cache(options, system):
         elif options.pl2sl3cache:
             icache = icache_class()
             dcache = dcache_class()
-            l2_cache = l2_cache_class(
-                prefetcher=TriagePrefetcher(
-                    cachetags=system.l3.tags,
-                    cache_delay=20,
-                    address_map_actual_entries="196608",
-                    address_map_actual_cache_assoc=96,
-                    address_map_rounded_entries="262144",
-                    address_map_rounded_cache_assoc=128,
-                )
-            )
+            if options.triangel:
+                        l2_cache = l2_cache_class(
+		        prefetcher=TriangelPrefetcher(
+		            cachetags=system.l3.tags,
+		            cache_delay=25,
+		            address_map_actual_entries="196608",
+		            address_map_actual_cache_assoc=96,
+		            address_map_rounded_entries="262144",
+		            address_map_rounded_cache_assoc=128
+		        )
+		        )
+            elif options.triage:
+                        l2_cache = l2_cache_class(
+		        prefetcher=TriagePrefetcher(
+		            cachetags=system.l3.tags,
+		            cache_delay=25,
+		            address_map_actual_entries="196608",
+		            address_map_actual_cache_assoc=96,
+		            address_map_rounded_entries="262144",
+		            address_map_rounded_cache_assoc=128
+		        )
+		        )
+            else:
+                        l2_cache = l2_cache_class(
+		        )
             # If we have a walker cache specified, instantiate two
             # instances here
             if walk_cache_class:
