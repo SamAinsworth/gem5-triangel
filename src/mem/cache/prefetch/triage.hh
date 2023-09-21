@@ -113,11 +113,11 @@ class Triage : public Queued
       int iteration;
       uint64_t set;
       uint64_t setMask; // address_map_rounded_entries/ maxElems - 1
-      Addr logaddrs[128];
-      Addr loglastaddrs[128];
-      Addr loglastlastaddrs[128];
-      Addr logpcs[128];
-      int logsize[128];
+      Addr logaddrs[64];
+      Addr loglastaddrs[64];
+      Addr loglastlastaddrs[64];
+      Addr logpcs[64];
+      int logsize[64];
       int maxElems = 8;
       bool sampleHistory;
       bool sampleTwoHistory;
@@ -132,8 +132,26 @@ class Triage : public Queued
       
       void reset() {
         iteration=0;
-        for(int x=0;x<128;x++) logsize[x]=0;
+        for(int x=0;x<64;x++) logsize[x]=0;
         set = random_mt.random<uint64_t>(0,setMask);
+      }
+      
+      void decrementOnLRU(Addr addr,AssociativeSet<TrainingUnitEntry>* trainer) {
+      	 if((addr & setMask) != set) return;
+         for(int y=iteration;y!=iteration+1;y=(y-1)&63) {
+               if(addr==logaddrs[y]) {
+               	    Addr pc = logpcs[y];
+               	    TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
+               	    if(entry!=nullptr) {
+               	    	if(entry->temporal>=8) {
+               	    		entry->temporal--;
+               	    		//printf("%s evicted, pc %s, temporality %d\n",addr, pc,entry->temporal);
+               	    	}
+               	    	
+               	    }
+               	    return;
+               }
+         }            
       }
       
       void add(Addr addr, Addr lastAddr, Addr lastLastAddr, Addr pc,AssociativeSet<TrainingUnitEntry>* trainer) {
@@ -142,20 +160,24 @@ class Triage : public Queued
         loglastaddrs[iteration] = lastAddr;
         loglastlastaddrs[iteration] = lastLastAddr;
         logpcs[iteration]=pc;
+        logsize[iteration]=0;
 
         
         TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
         if(entry!=nullptr) {
-          for(int y=iteration-1;y>=-1;y--) {
-               if(y<0 || logsize[y] == maxElems) {
+          for(int y=iteration-1;y!=iteration;y=(y-1)&63) {
+               
+               if(logsize[y] == maxElems) {
                  //no match
+                 //printf("%s above max elems, pc %s, temporality %d\n",addr, pc,entry->temporal-1);
                  entry->temporal--;
                  break;
                }
                if(addr==logaddrs[y]) {
                  //found a match
+                 //printf("%s fits, pc %s, temporality %d\n",addr, pc,entry->temporal+1);
                    entry->temporal++;
-                   for(int z=y;z<iteration;z++) {
+                   for(int z=y;z!=iteration;z=(z+1)&63){
                    	logsize[z]++;
                    }
                  	
@@ -169,9 +191,7 @@ class Triage : public Queued
             }            
         }
         iteration++;
-        if(iteration==128) {
-        	reset();
-        }
+        iteration = iteration % 64;
       }
       
     };
@@ -185,16 +205,18 @@ class Triage : public Queued
     /** Address Mapping entry, holds an address and a confidence counter */
     struct AddressMapping : public TaggedEntry
     {
+    	Addr index; //Just for maintaining HawkEye easily. Not real.
         Addr address;
         bool confident;
-        AddressMapping() : address(0), confident(false)
+        AddressMapping() : index(0), address(0), confident(false)
         {}
 
 
         void
         invalidate() override
         {
-                    TaggedEntry::invalidate();
+                TaggedEntry::invalidate();
+              
                 address = 0;
                 confident = false;
         }

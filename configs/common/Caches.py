@@ -64,7 +64,7 @@ class L1_ICache(L1Cache):
     assoc = 4
     is_read_only = True
     # Writeback clean lines as well
-    writeback_clean = True
+    #writeback_clean = True
 
 
 class L1_DCache(L1Cache):
@@ -76,7 +76,7 @@ class L1_DCache(L1Cache):
     assoc = 4
     write_buffers = 32
     prefetch_on_access = True
-    #prefetcher = StridePrefetcher(degree=8, latency = 1)    
+    prefetcher = StridePrefetcher(degree=8, latency = 1)    
     # Simple stride prefetcher
 
 

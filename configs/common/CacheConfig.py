@@ -252,21 +252,57 @@ def config_cache(options, system):
 		        prefetcher=TriangelPrefetcher(
 		            cachetags=system.l3.tags,
 		            cache_delay=25,
-		            address_map_actual_entries="196608",
-		            address_map_actual_cache_assoc=96,
+      		            address_map_line_assoc=16,
+		            address_map_actual_entries="262144",
+		            address_map_actual_cache_assoc=128,
 		            address_map_rounded_entries="262144",
-		            address_map_rounded_cache_assoc=128
+		            address_map_rounded_cache_assoc=128,
+		            prefetched_cache_entries="256",
+		            lookup_assoc = 8,
+		            lookup_entries="1024"
 		        )
 		        )
+            elif options.triangelnonaggro:
+                        l2_cache = l2_cache_class(
+		        prefetcher=TriangelPrefetcher(
+		            cachetags=system.l3.tags,
+		            cache_delay=25,
+		            degree=4,
+		            address_map_line_assoc=16,
+		            aggressive=False,
+		            address_map_actual_entries="262144",
+		            address_map_actual_cache_assoc=128,
+		            address_map_rounded_entries="262144",
+		            address_map_rounded_cache_assoc=128,
+		            prefetched_cache_entries="256",
+		            lookup_assoc = 8,
+		            lookup_entries="1024"		            
+		        )
+		        )		        
             elif options.triage:
                         l2_cache = l2_cache_class(
 		        prefetcher=TriagePrefetcher(
 		            cachetags=system.l3.tags,
 		            cache_delay=25,
-		            address_map_actual_entries="196608",
-		            address_map_actual_cache_assoc=96,
+		            address_map_line_assoc=16,
+		            address_map_actual_entries="262144",
+		            address_map_actual_cache_assoc=128,
 		            address_map_rounded_entries="262144",
-		            address_map_rounded_cache_assoc=128
+		            address_map_rounded_cache_assoc=128,
+		            store_unreliable=False
+                        )
+                        )
+            elif options.triagelru:
+                        l2_cache = l2_cache_class(
+		        prefetcher=TriagePrefetcher(
+		            cachetags=system.l3.tags,
+		            cache_delay=25,
+       		            address_map_line_assoc=16,
+		            address_map_actual_entries="262144",
+		            address_map_actual_cache_assoc=128,
+		            address_map_rounded_entries="262144",
+		            address_map_rounded_cache_assoc=128,
+		            address_map_cache_replacement_policy=LRURP()
 		        )
 		        )
             else:

@@ -356,6 +356,9 @@ class Base : public ClockedObject
         statistics::Scalar pfHitInWB;
 
         statistics::Scalar metadataAccesses;
+        
+        statistics::Scalar lookupCorrect;
+        statistics::Scalar lookupWrong;
 
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */

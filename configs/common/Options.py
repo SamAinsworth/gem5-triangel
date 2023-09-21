@@ -196,8 +196,9 @@ def addNoISAOptions(parser):
     parser.add_argument("--ruby", action="store_true")
 
     parser.add_argument("--triangel", action="store_true")
-    
+    parser.add_argument("--triangelnonaggro", action="store_true")
     parser.add_argument("--triage", action="store_true")    
+    parser.add_argument("--triagelru", action="store_true")  
 
     # Run duration options
     parser.add_argument(

@@ -736,10 +736,10 @@ class TriagePrefetcher(QueuedPrefetcher):
     )
 
     address_map_line_assoc = Param.Unsigned(
-        12, "Associativity per line of history"
+        16, "Associativity per line of history"
     )
     address_map_actual_entries = Param.MemorySize(
-        "98304", "Number of entries of the History table"
+        "262144", "Number of entries of the History table"
     )
     address_map_actual_cache_assoc = Param.Unsigned(
         96, "Associativity of the History Table"
@@ -764,6 +764,11 @@ class TriagePrefetcher(QueuedPrefetcher):
     hawkeye_threshold=Param.Unsigned(8,"Temporal/Non-temporal threshold (lower more permissive)")    
 
 
+class LookupHashedSetAssociative(SetAssociative):
+    type = "LookupHashedSetAssociative"
+    cxx_class = "gem5::prefetch::LookupHashedSetAssociative"
+    cxx_header = "mem/cache/prefetch/triangel.hh"
+
 class TriangelHashedSetAssociative(SetAssociative):
     type = "TriangelHashedSetAssociative"
     cxx_class = "gem5::prefetch::TriangelHashedSetAssociative"
@@ -785,13 +790,13 @@ class TriangelPrefetcher(QueuedPrefetcher):
 
     cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
 
-    triage_mode = Param.Bool(
-        False, "Sampler doesn't control history use or storage, only size"
+    aggressive = Param.Bool(
+        True, "Add to the history store before the sampler works out the pattern length."
     )
 
     #  use_requestor_id = Param.Bool(True, "Use requestor id based history")
 
-    # degree = Param.Int(1, "Number of prefetches to generate")
+    degree = Param.Int(2, "Number of prefetches to generate")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
     
     owntags = Param.BaseTags(Parent.tags, "Cache we belong to")
@@ -840,6 +845,24 @@ class TriangelPrefetcher(QueuedPrefetcher):
     address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
         LRURP(), "Replacement policy of the PC table"
     )
+    lookup_assoc = Param.Int(8, "Associativity of the Sample Cache")
+    lookup_entries = Param.MemorySize(
+        "1024", "Number of entries of the Sample cache"
+    )
+    lookup_indexing_policy = Param.BaseIndexingPolicy(
+        LookupHashedSetAssociative(
+            entry_size=1,
+            assoc=Parent.lookup_assoc,
+            size=Parent.lookup_entries,
+        ),
+        "Indexing policy of the sample cache",
+    )
+    lookup_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the training unit"
+    )
+    prefetched_cache_assoc = Param.Int(
+        2, "Associativity of the Prefetched Cache"
+    )    
     sample_assoc = Param.Int(2, "Associativity of the Sample Cache")
     sample_entries = Param.MemorySize(
         "1024", "Number of entries of the Sample cache"

@@ -144,10 +144,11 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
         trainingUnit.insertEntry(pc, is_secure, entry);
     }
 
-    global_timestamp++;
+
 
 
     if(correlated_addr_found && ((temporal && sequential) || store_unreliable)) {
+        global_timestamp++;
         int add = bloom_add(&bl, &addr, sizeof(Addr));
         if(!add) target_size++;
    	while(target_size > current_size
@@ -188,10 +189,11 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     if (correlated_addr_found && (addressMappingCache.getWayAllocationMax()>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal);
+	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal && sequential);
 	if(mapping == nullptr) {
-        	mapping = getHistoryEntry(index, is_secure,true,false,temporal);
+        	mapping = getHistoryEntry(index, is_secure,true,false,temporal && sequential);
         	mapping->address = target;
+        	mapping->index=index; //for HawkEye
         	mapping->confident = false;
         }
         assert(mapping != nullptr);
@@ -204,7 +206,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     }
 
     if(target != 0 && (addressMappingCache.getWayAllocationMax()>0)) {
-  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal);
+  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal && sequential);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
      	 unsigned max = degree;
@@ -214,7 +216,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     		addresses.push_back(AddrPriority(pf_target->address << lBlkSize, delay));
     		delay += cacheDelay;
     		deg++;
-    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(pf_target->address, is_secure,false,true,temporal);
+    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(pf_target->address, is_secure,false,true,temporal && sequential);
 
    	 }
     }
@@ -241,6 +243,7 @@ Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, boo
         if(!add) return nullptr;
         ps_entry = addressMappingCache.findVictim(paddr);
         assert(ps_entry != nullptr);
+        for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
 	assert(!ps_entry->isValid());
         addressMappingCache.insertEntry(paddr, is_secure, ps_entry);
         addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0);

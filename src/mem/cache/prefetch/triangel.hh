@@ -21,6 +21,7 @@
 #include "base/random.hh"
 
 #include "params/TriangelHashedSetAssociative.hh"
+#include "params/LookupHashedSetAssociative.hh"
 
 #include "bloom.h"
 
@@ -54,12 +55,27 @@ class TriangelHashedSetAssociative : public SetAssociative
     ~TriangelHashedSetAssociative() = default;
 };
 
+class LookupHashedSetAssociative : public SetAssociative
+{
+  protected:
+    uint32_t extractSet(const Addr addr) const override;
+    Addr extractTag(const Addr addr) const override;
+
+  public:
+    LookupHashedSetAssociative(
+        const LookupHashedSetAssociativeParams &p)
+      : SetAssociative(p)
+    {
+    }
+    ~LookupHashedSetAssociative() = default;
+};
+
 
 class Triangel : public Queued
 {
 
     /** Number of maximum prefetches requests created when predicting */
-   // const unsigned degree; //TODO: currently ignored
+    const unsigned degree;
 
     /**
      * Training Unit Entry datatype, it holds the last accessed address and
@@ -72,11 +88,12 @@ class Triangel : public Queued
     BaseTags* owntags;
 
     bool randomChance(int r, int s);
-
+    const bool aggressive;
     const int max_size;
     const int size_increment;
     int64_t global_timestamp;
     int64_t reuse_timer;
+    uint64_t lowest_blocked_entry;
     int current_size;
     int target_size;
     const int historyLineAssoc;
@@ -93,6 +110,7 @@ class Triangel : public Queued
         Addr lastLastAddress;
         int64_t local_timestamp;
         int reuseDistance;
+        bool reuseSet;
         int64_t globalReuseDistance;
         int deviation;
         SatCounter8  reuseConfidence;
@@ -107,7 +125,7 @@ class Triangel : public Queued
 
 
 
-        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0), reuseDistance(-1), globalReuseDistance(-1), deviation(0), reuseConfidence(4,8), historyConfidence(4,8), replaceRate(4,8), lastAddressSecure(false), lastLastAddressSecure(false),historied_this_round(false),currently_blocking(false)
+        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0), reuseDistance(0), reuseSet(false), globalReuseDistance(-1), deviation(0), reuseConfidence(4,8), historyConfidence(4,8), replaceRate(4,8), lastAddressSecure(false), lastLastAddressSecure(false),historied_this_round(false),currently_blocking(false)
         {}
 
         void
@@ -117,7 +135,9 @@ class Triangel : public Queued
                 lastAddress = 0;
                 lastLastAddress = 0;
                 local_timestamp=0;
-                reuseDistance = -1;
+                reuseDistance = 0;
+                reuseSet = false;
+                globalReuseDistance = -1;
                 reuseConfidence.reset();
                 historyConfidence.reset();
                 replaceRate.reset();
@@ -147,6 +167,21 @@ class Triangel : public Queued
                 address = 0;
                 confident = false;
                 cycle_issued=Cycles(0);
+        }
+    };
+    
+    struct LookupMapping : public TaggedEntry
+    {
+        Addr address;
+        LookupMapping() : address(0)
+        {}
+
+
+        void
+        invalidate() override
+        {
+                    TaggedEntry::invalidate();
+                address = 0;
         }
     };
 
@@ -188,6 +223,9 @@ class Triangel : public Queued
 
     /** History mappings table */
     AssociativeSet<AddressMapping> addressMappingCache;
+    
+    
+    AssociativeSet<LookupMapping> lookupCache;
 
     AssociativeSet<AddressMapping> prefetchedCache;
     bool lastAccessFromPFCache;
