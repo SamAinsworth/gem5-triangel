@@ -196,9 +196,22 @@ def addNoISAOptions(parser):
     parser.add_argument("--ruby", action="store_true")
 
     parser.add_argument("--triangel", action="store_true")
-    parser.add_argument("--triangelnonaggro", action="store_true")
+    parser.add_argument("--triangelsmall", action="store_true")   
+    parser.add_argument("--triangel256", action="store_true")         
+    parser.add_argument("--triangel256lru", action="store_true")        
+    parser.add_argument("--triangel256a12", action="store_true")     
+    parser.add_argument("--triangel256lut", action="store_true")   
+    parser.add_argument("--triangel256ideal", action="store_true")                 
+    parser.add_argument("--triagefalut", action="store_true")    
+    parser.add_argument("--triage12", action="store_true")    
     parser.add_argument("--triage", action="store_true")    
+    parser.add_argument("--triage10boff", action="store_true")    
+    parser.add_argument("--triagenounrel", action="store_true")        
     parser.add_argument("--triagelru", action="store_true")  
+    parser.add_argument("--triage256", action="store_true")    
+    parser.add_argument("--triage256ideal", action="store_true")        
+    parser.add_argument("--triagenounrel256", action="store_true")        
+    parser.add_argument("--triagelru256", action="store_true")  
 
     # Run duration options
     parser.add_argument(

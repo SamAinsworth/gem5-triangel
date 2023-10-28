@@ -65,17 +65,19 @@ Triage::Triage(
     cacheDelay(p.cache_delay),
     store_unreliable(p.store_unreliable),
     max_size(p.address_map_actual_entries),
-    size_increment(p.address_map_actual_entries/(p.address_map_actual_cache_assoc/p.address_map_line_assoc)),
+    size_increment(p.address_map_actual_entries/p.address_map_max_ways),
     global_timestamp(0),
     current_size(0),
     target_size(0),
-    historyLineAssoc(p.address_map_line_assoc),
-    maxLineAssoc(p.address_map_actual_cache_assoc),
+    maxWays(p.address_map_max_ways),
     hawkeyeThreshold(p.hawkeye_threshold),
     bl(),
+    way_idx(p.address_map_actual_entries/(p.address_map_max_ways*p.address_map_actual_cache_assoc),0),
     trainingUnit(p.training_unit_assoc, p.training_unit_entries,
                  p.training_unit_indexing_policy,
                  p.training_unit_replacement_policy),
+    lookupAssoc(p.lookup_assoc),
+    lookupOffset(p.lookup_offset),
     addressMappingCache(p.address_map_rounded_cache_assoc,
                           p.address_map_rounded_entries,
                           p.address_map_cache_indexing_policy,
@@ -83,16 +85,17 @@ Triage::Triage(
                           AddressMapping())
 {
 	for(int x=0;x<64;x++) {
-		hawksets[x].sampleHistory=p.sample_history;
-		hawksets[x].sampleTwoHistory=p.sample_two_history;
 		hawksets[x].setMask = p.address_map_rounded_entries/ hawksets[x].maxElems - 1;
 		hawksets[x].reset();
 	}
-	addressMappingCache.setWayAllocationMax(0);
-	assert(cachetags->numBlocks * historyLineAssoc == max_size * 2);
-	assert(cachetags->getWayAllocationMax() * historyLineAssoc == maxLineAssoc * 2);
+	for(int x=0;x<1024;x++) {
+		lookupTable[x]=0;
+    		lookupTick[x]=0;
+	}
 
 	assert(p.address_map_rounded_entries / p.address_map_rounded_cache_assoc == p.address_map_actual_entries / p.address_map_actual_cache_assoc);
+	addressMappingCache.setWayAllocationMax(p.address_map_actual_cache_assoc);
+	assert(cachetags->getWayAllocationMax()> maxWays+1);
 
 	bloom_init2(&bl,p.address_map_actual_entries, 0.01);
 }
@@ -119,18 +122,15 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 
 
     bool temporal = true;
-    bool sequential = true;
 
 
     if (entry != nullptr) {
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
         index = entry->lastAddress;
-        Addr prev = entry->lastLastAddress;
             
-    	for(int x=0; x<64; x++)hawksets[x].add(addr,index,prev,pc,&trainingUnit);
+    	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
         temporal = entry->temporal>=hawkeyeThreshold;
-        sequential = entry->sequence>=hawkeyeThreshold;
 
         if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
 
@@ -147,21 +147,36 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 
 
 
-    if(correlated_addr_found && ((temporal && sequential) || store_unreliable)) {
+    if(correlated_addr_found /*&& (temporal || store_unreliable)*/) {
         global_timestamp++;
         int add = bloom_add(&bl, &addr, sizeof(Addr));
         if(!add) target_size++;
    	while(target_size > current_size
             		     && current_size < max_size) {
-            		        //check for size_increment to leave empty if unlikely to be useful.
-            			current_size += size_increment;
-            			assert(current_size <= max_size);
-            			assert(cachetags->getWayAllocationMax()>1);
-            			cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
-            			addressMappingCache.setWayAllocationMax(addressMappingCache.getWayAllocationMax()+historyLineAssoc);
-            			assert(addressMappingCache.getWayAllocationMax()<=maxLineAssoc);
-            			//increase associativity of the set structure by 1!
-            			//Also, decrease LLC cache associativity by 1.
+            	current_size += size_increment;
+            	assert(current_size <= max_size);
+            	assert(cachetags->getWayAllocationMax()>1);
+            	cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
+            	std::vector<AddressMapping> ams;
+             	for(AddressMapping am: addressMappingCache) {
+            		if(am.isValid()) ams.push_back(am);
+            	}
+            	
+            	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  		if(thsa) { thsa->ways++; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
+  		else assert(0);
+            	//TODO: rearrange conditionally
+		for(AddressMapping am: ams) {
+		    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
+		    		   mapping->address = am.address;
+		    		   mapping->index=am.index;
+		    		   mapping->confident = am.confident;
+		    		   mapping->lookupIndex=am.lookupIndex;
+		    		   //mapping->replacementData=am.replacementData;
+		}
+		    
+
+
         }
 
         //TODO: add error expansion. Not that major though -- our bloom filter is big and this is a ceiling function, so who cares?
@@ -175,23 +190,49 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     		//Also, increase LLC cache associativity by 1.
     		current_size -= size_increment;
 	    	assert(current_size >= 0);
-	    	assert(addressMappingCache.getWayAllocationMax()>=historyLineAssoc);
+	    	std::vector<AddressMapping> ams;
+		    	
+		for(AddressMapping am: addressMappingCache) {
+		    		if(am.isValid()) ams.push_back(am);
+		}
+	    	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  				if(thsa) { assert(thsa->ways >0); thsa->ways--; }
+  				else assert(0);
+            	//TODO: rearrange conditionally
+            	
+            	if(current_size >0) {
+		      	for(AddressMapping am: ams) {
+		    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
+		    		   mapping->address = am.address;
+		    		   mapping->index=am.index;
+		    		   mapping->confident = am.confident;
+		    		   mapping->lookupIndex=am.lookupIndex;
+		    		  
+		    	}    	
+            	}
+            	
+            	for(AddressMapping& am: addressMappingCache) {
+		    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways)  am.invalidate();
+		}
+            	
+            	
+            	
+
     		cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()+1);
-    		addressMappingCache.setWayAllocationMax(addressMappingCache.getWayAllocationMax()-historyLineAssoc);
     	}
     	target_size = 0;
     	global_timestamp=0;
     	bloom_reset(&bl);
     }
     
-    if((!temporal || !sequential) && !store_unreliable) return;
+    if(!temporal && !store_unreliable) return;
 
-    if (correlated_addr_found && (addressMappingCache.getWayAllocationMax()>0)) {
+    if (correlated_addr_found && (current_size>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal && sequential);
+	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal, false);
 	if(mapping == nullptr) {
-        	mapping = getHistoryEntry(index, is_secure,true,false,temporal && sequential);
+        	mapping = getHistoryEntry(index, is_secure,true,false,temporal, false);
         	mapping->address = target;
         	mapping->index=index; //for HawkEye
         	mapping->confident = false;
@@ -203,20 +244,51 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
         if(!wasConfident) {
         	mapping->address = target;
         }
+        
+        int index=0;
+        uint64_t time = -1;
+        if(lookupAssoc>0){
+		int lookupMask = (1024/lookupAssoc)-1;
+		int set = (target>>lookupOffset)&lookupMask;
+		for(int x=lookupAssoc*set;x<lookupAssoc*(set+1);x++) {
+			if(target>>lookupOffset == lookupTable[x]) {
+				index=x;
+				break;
+			}
+			if(time > lookupTick[x]) {
+				time = lookupTick[x];
+				index=x;
+			}
+		}
+		
+		lookupTable[index]=target>>lookupOffset;
+		lookupTick[index]=curTick();
+		mapping->lookupIndex=index;
+        }
     }
 
-    if(target != 0 && (addressMappingCache.getWayAllocationMax()>0)) {
-  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal && sequential);
+    if(target != 0 && (current_size>0)) {
+  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal, false);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
      	 unsigned max = degree;
    	 while (pf_target != nullptr && deg < max) //TODO: and confident? not clear from paper. public implementation suggests no
    	 {
-    		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
-    		addresses.push_back(AddrPriority(pf_target->address << lBlkSize, delay));
+   	 	Addr lookup = pf_target->address;
+   	        if(lookupAssoc>0){
+	   	 	int index=pf_target->lookupIndex;
+	   	 	int lookupMask = (1<<lookupOffset)-1;
+	   	 	lookup = (lookupTable[index]<<lookupOffset) + ((pf_target->address)&lookupMask);
+	   	 	lookupTick[index]=curTick();
+	   	 	if(lookup == pf_target->address)prefetchStats.lookupCorrect++;
+	    		else prefetchStats.lookupWrong++;
+    		}
+    		
+    		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", lookup << lBlkSize, addr << lBlkSize, pc);
+    		addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
     		delay += cacheDelay;
     		deg++;
-    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(pf_target->address, is_secure,false,true,temporal && sequential);
+    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(lookup, is_secure,false,true,temporal, false);
 
    	 }
     }
@@ -230,23 +302,31 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 }
 
 Triage::AddressMapping*
-Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool temporal)
+Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool temporal, bool clearing)
 {
+	    	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  				if(!thsa)  assert(0);
+    int index= paddr % (way_idx.size()); //Not quite the same indexing strategy, but close enough.
+    
+    if(way_idx[index] != thsa->ways) {
+    	if(way_idx[index] !=0) prefetchStats.metadataAccesses+= thsa->ways + way_idx[index];
+    	way_idx[index]=thsa->ways;
+    }
 
     AddressMapping *ps_entry =
         addressMappingCache.findEntry(paddr, is_secure);
     if(readonly || !add) prefetchStats.metadataAccesses++;
     if (ps_entry != nullptr) {
         // A PS-AMC line already exists
-        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0); //Higher weight is higher priority.
+        addressMappingCache.accessEntry(ps_entry); //Touch for RRIP
     } else {
         if(!add) return nullptr;
         ps_entry = addressMappingCache.findVictim(paddr);
         assert(ps_entry != nullptr);
-        for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
+        if(!clearing) for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
 	assert(!ps_entry->isValid());
         addressMappingCache.insertEntry(paddr, is_secure, ps_entry);
-        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0);
+        if(temporal) addressMappingCache.accessEntry(ps_entry); //Touch for HawkEye
     }
 
     return ps_entry;
@@ -259,35 +339,36 @@ uint32_t
 TriageHashedSetAssociative::extractSet(const Addr addr) const
 {
 	//Input is already blockIndex so no need to remove block again.
-    const Addr offset = addr;
-        return offset & setMask;   //setMask is numSets-1
-
-    //The below is a literal interpretation of Triage-ISR. It complicates things here (and doesn't help performance without stream) so I avoid it.
-   /* const Addr hash1 = offset & ((1<<16)-1);
+    Addr offset = addr;
+    
+    const Addr hash1 = offset & ((1<<16)-1);
     const Addr hash2 = (offset >> 16) & ((1<<16)-1);
         const Addr hash3 = (offset >> 32) & ((1<<16)-1);
-    return (hash1 ^ hash2 ^ hash3) & setMask;   //setMask is numSets-1
-    */
+    
+        offset = ((hash1 ^ hash2 ^ hash3) * max_ways) + (extractTag(addr) % ways);
+        return offset & setMask;   //setMask is numSets-1
+
 }
+
 
 Addr
 TriageHashedSetAssociative::extractTag(const Addr addr) const
 {
     //Input is already blockIndex so no need to remove block again.
-    //TODO: match the tag size sig of the chosen format. Currently hardcoded to 127.
+    //TODO: match the tag size sig of the chosen format. Currently hardcoded to 10bits.
 
     //Description in Triage-ISR confuses whether the index is just the 16 least significant bits,
     //or the weird index above. The tag can't be the remaining bits if we use the literal representation!
 
-    //Here I just remove the set offset and xor together the rest.
+    //Here I xor together the lot.
     //Really, xoring in the set bits is innocuous if they're all the same.
 
-    Addr offset = addr >> tagShift;
+    Addr offset = addr;
     int result = 0;
 
     const int shiftwidth=10;
 
-    for(int x=0; x<64-tagShift; x+=shiftwidth) {
+    for(int x=0; x<64; x+=shiftwidth) {
        result ^= (offset & ((1<<shiftwidth)-1));
        offset = offset >> shiftwidth;
     }

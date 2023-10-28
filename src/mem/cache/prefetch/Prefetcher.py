@@ -711,17 +711,22 @@ class TriagePrefetcher(QueuedPrefetcher):
     sample_history= Param.Bool(False,"Add history into hawkeye calculation")
     sample_two_history= Param.Bool(False,"Add 2nd history into hawkeye calculation")
     store_unreliable =Param.Bool(True,"Store history for unreliable PCs")
-
     cachetags = Param.BaseTags(Parent.tags, "Cache we're storing metadata in")
 
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
     
     degree = Param.Int(1, "Number of prefetches to generate")
+    lookup_assoc = Param.Unsigned(
+        16, "Associativity of the lookup table"
+    )
+    lookup_offset = Param.Unsigned(
+        11, "Offset of the lookup table"
+    )
     training_unit_assoc = Param.Unsigned(
-        64, "Associativity of the training unit"
+        16, "Associativity of the training unit"
     )
     training_unit_entries = Param.MemorySize(
-        "1024", "Number of entries of the training unit"
+        "512", "Number of entries of the training unit"
     )
     training_unit_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(
@@ -734,21 +739,21 @@ class TriagePrefetcher(QueuedPrefetcher):
     training_unit_replacement_policy = Param.BaseReplacementPolicy(
         LRURP(), "Replacement policy of the training unit"
     )
-
-    address_map_line_assoc = Param.Unsigned(
-        16, "Associativity per line of history"
-    )
+    
     address_map_actual_entries = Param.MemorySize(
         "262144", "Number of entries of the History table"
     )
+    address_map_max_ways = Param.Unsigned(
+        8, "Max reservation of the History Table"
+    )    
     address_map_actual_cache_assoc = Param.Unsigned(
-        96, "Associativity of the History Table"
+        16, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
     address_map_rounded_entries = Param.MemorySize(
-        "131072", "Number of entries of the History table"
+        "262144", "Number of entries of the History table"
     )  # TODO: assert = rnd(address_map_line_assoc) * cache size / 64 / 2
     address_map_rounded_cache_assoc = Param.Unsigned(
-        128, "Associativity of the History Table"
+        16, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
     address_map_cache_indexing_policy = Param.BaseIndexingPolicy(
         TriageHashedSetAssociative(
@@ -759,15 +764,10 @@ class TriagePrefetcher(QueuedPrefetcher):
         "Indexing policy of the PC table",
     )
     address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
-        WeightedLRURP(), "Replacement policy of the PC table"
+        BRRIPRP(num_bits=3,btp=0), "Replacement policy of the PC table"
     )
     hawkeye_threshold=Param.Unsigned(8,"Temporal/Non-temporal threshold (lower more permissive)")    
 
-
-class LookupHashedSetAssociative(SetAssociative):
-    type = "LookupHashedSetAssociative"
-    cxx_class = "gem5::prefetch::LookupHashedSetAssociative"
-    cxx_header = "mem/cache/prefetch/triangel.hh"
 
 class TriangelHashedSetAssociative(SetAssociative):
     type = "TriangelHashedSetAssociative"
@@ -790,22 +790,24 @@ class TriangelPrefetcher(QueuedPrefetcher):
 
     cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
 
-    aggressive = Param.Bool(
-        True, "Add to the history store before the sampler works out the pattern length."
-    )
-
+    use_hawkeye= Param.Bool(False,"Add hawkeye after the sample cache")
     #  use_requestor_id = Param.Bool(True, "Use requestor id based history")
 
     degree = Param.Int(2, "Number of prefetches to generate")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
     
     owntags = Param.BaseTags(Parent.tags, "Cache we belong to")
-    
+    lookup_assoc = Param.Unsigned(
+        0, "Associativity of the lookup table"
+    )
+    lookup_offset = Param.Unsigned(
+        11, "Offset of the lookup table"
+    )    
     training_unit_assoc = Param.Unsigned(
-        64, "Associativity of the training unit"
+        16, "Associativity of the training unit"
     )
     training_unit_entries = Param.MemorySize(
-        "1024", "Number of entries of the training unit"
+        "512", "Number of entries of the training unit"
     )
     training_unit_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(
@@ -819,20 +821,20 @@ class TriangelPrefetcher(QueuedPrefetcher):
         LRURP(), "Replacement policy of the training unit"
     )
 
-    address_map_line_assoc = Param.Unsigned(
-        12, "Associativity per line of history"
-    )
     address_map_actual_entries = Param.MemorySize(
-        "98304", "Number of entries of the History table"
+        "196608", "Number of entries of the History table"
     )
+    address_map_max_ways = Param.Unsigned(
+        8, "Max reservation of the History Table"
+    )    
     address_map_actual_cache_assoc = Param.Unsigned(
-        96, "Associativity of the History Table"
+        12, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
     address_map_rounded_entries = Param.MemorySize(
-        "131072", "Number of entries of the History table"
+        "262144", "Number of entries of the History table"
     )  # TODO: assert = rnd(address_map_line_assoc) * cache size / 64 / 2
     address_map_rounded_cache_assoc = Param.Unsigned(
-        128, "Associativity of the History Table"
+        16, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
     address_map_cache_indexing_policy = Param.BaseIndexingPolicy(
         TriangelHashedSetAssociative(
@@ -845,27 +847,12 @@ class TriangelPrefetcher(QueuedPrefetcher):
     address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
         LRURP(), "Replacement policy of the PC table"
     )
-    lookup_assoc = Param.Int(8, "Associativity of the Sample Cache")
-    lookup_entries = Param.MemorySize(
-        "1024", "Number of entries of the Sample cache"
-    )
-    lookup_indexing_policy = Param.BaseIndexingPolicy(
-        LookupHashedSetAssociative(
-            entry_size=1,
-            assoc=Parent.lookup_assoc,
-            size=Parent.lookup_entries,
-        ),
-        "Indexing policy of the sample cache",
-    )
-    lookup_replacement_policy = Param.BaseReplacementPolicy(
-        LRURP(), "Replacement policy of the training unit"
-    )
     prefetched_cache_assoc = Param.Int(
         2, "Associativity of the Prefetched Cache"
     )    
     sample_assoc = Param.Int(2, "Associativity of the Sample Cache")
     sample_entries = Param.MemorySize(
-        "1024", "Number of entries of the Sample cache"
+        "256", "Number of entries of the Sample cache"
     )
     sample_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(
@@ -882,7 +869,7 @@ class TriangelPrefetcher(QueuedPrefetcher):
         2, "Associativity of the Prefetched Cache"
     )
     prefetched_cache_entries = Param.MemorySize(
-        "32", "Number of entries of the Prefetched cache"
+        "256", "Number of entries of the Prefetched cache"
     )
     prefetched_cache_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(
@@ -900,7 +887,7 @@ class TriangelPrefetcher(QueuedPrefetcher):
         2, "Associativity of the Prefetched Cache"
     )
     test_entries = Param.MemorySize(
-        "256", "Number of entries of the Prefetched cache"
+        "32", "Number of entries of the Prefetched cache"
     )
     test_indexing_policy = Param.BaseIndexingPolicy(
         SetAssociative(

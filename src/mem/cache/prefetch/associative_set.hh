@@ -58,10 +58,10 @@ class AssociativeSet
      */
   public:
     const int numEntries;
-  private:
+
     /** Pointer to the indexing policy */
     BaseIndexingPolicy* const indexingPolicy;
-    /** Pointer to the replacement policy */
+    /** Pointer to the replacement policy */   
     replacement_policy::Base* const replacementPolicy;
     /** Vector containing the entries of the container */
     std::vector<Entry> entries;

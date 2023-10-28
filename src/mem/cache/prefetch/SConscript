@@ -32,7 +32,7 @@ SimObject('Prefetcher.py', sim_objects=[
     'BasePrefetcher', 'MultiPrefetcher', 'QueuedPrefetcher',
     'StridePrefetcherHashedSetAssociative', 'StridePrefetcher',
     'TriangelHashedSetAssociative', 'TriangelPrefetcher',
-    'TriageHashedSetAssociative', 'LookupHashedSetAssociative', 'TriagePrefetcher',
+    'TriageHashedSetAssociative', 'TriagePrefetcher',
     'TaggedPrefetcher', 'IndirectMemoryPrefetcher', 'SignaturePathPrefetcher',
     'SignaturePathPrefetcherV2', 'AccessMapPatternMatching', 'AMPMPrefetcher',
     'DeltaCorrelatingPredictionTables', 'DCPTPrefetcher',

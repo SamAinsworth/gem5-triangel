@@ -64,22 +64,21 @@ Triangel::Triangel(
     cachetags(p.cachetags),
     cacheDelay(p.cache_delay),
     owntags(p.owntags),
-    aggressive(p.aggressive),
     max_size(p.address_map_actual_entries),
-    size_increment(p.address_map_actual_entries/(p.address_map_actual_cache_assoc/p.address_map_line_assoc)),
+    size_increment(p.address_map_actual_entries/p.address_map_max_ways),
     global_timestamp(0),
-    reuse_timer(0),
     current_size(0),
     target_size(0),
-    historyLineAssoc(p.address_map_line_assoc),
-    maxLineAssoc(p.address_map_actual_cache_assoc),
+    maxWays(p.address_map_max_ways),    
     sum_deviation(0),
-    paths(0),
-    historyNonHistory(8,128),
     bl(),
+    way_idx(p.address_map_actual_entries/(p.address_map_max_ways*p.address_map_actual_cache_assoc),0),
     trainingUnit(p.training_unit_assoc, p.training_unit_entries,
                  p.training_unit_indexing_policy,
                  p.training_unit_replacement_policy),
+    lookupAssoc(p.lookup_assoc),
+    lookupOffset(p.lookup_offset),                 
+    useHawkeye(p.use_hawkeye),
     sampleUnit(p.sample_assoc,
     		  p.sample_entries,
     		  p.sample_indexing_policy,
@@ -92,12 +91,7 @@ Triangel::Triangel(
                           p.address_map_rounded_entries,
                           p.address_map_cache_indexing_policy,
                           p.address_map_cache_replacement_policy,
-                          AddressMapping()),
-    lookupCache(p.lookup_assoc,
-                          p.lookup_entries,
-                          p.lookup_indexing_policy,
-                          p.lookup_replacement_policy,
-                          LookupMapping()),                          
+                          AddressMapping()),                   
     prefetchedCache(p.prefetched_cache_assoc,
                           p.prefetched_cache_entries,
                           p.prefetched_cache_indexing_policy,
@@ -105,13 +99,20 @@ Triangel::Triangel(
                           AddressMapping()),
     lastAccessFromPFCache(false)
 {
-	addressMappingCache.setWayAllocationMax(0);
-	assert(cachetags->numBlocks * historyLineAssoc == max_size * 2);
-	assert(cachetags->getWayAllocationMax() * historyLineAssoc == maxLineAssoc * 2);
-
 	assert(p.address_map_rounded_entries / p.address_map_rounded_cache_assoc == p.address_map_actual_entries / p.address_map_actual_cache_assoc);
+	addressMappingCache.setWayAllocationMax(p.address_map_actual_cache_assoc);
+	assert(cachetags->getWayAllocationMax()> maxWays+1);
 
 	bloom_init2(&bl,p.address_map_actual_entries, 0.01);
+	
+	for(int x=0;x<64;x++) {
+		hawksets[x].setMask = p.address_map_rounded_entries/ hawksets[x].maxElems - 1;
+		hawksets[x].reset();
+	}
+	for(int x=0;x<1024;x++) {
+		lookupTable[x]=0;
+    		lookupTick[x]=0;
+	}	
 }
 
 
@@ -148,7 +149,6 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
 
     bool should_pf=false;
     bool should_pf_twice = false;
-    reuse_timer++;
     bool should_sample = false;
     if (entry != nullptr) {
         trainingUnit.accessEntry(entry);
@@ -160,17 +160,11 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
         //if very sure, index should be lastLastAddress. TODO: We could also try to learn timeliness here, by tracking PCs at the MSHRs.
         if(entry->currently_twodist_pf) index = entry->lastLastAddress;
         target = addr;
-        should_pf = aggressive? (entry->reuseConfidence > 7 && entry->historyConfidence > 7): (entry->reuseConfidence > 12 && entry->historyConfidence > 8); //8 is the reset point.
+        should_pf = entry->reuseConfidence > 12 && entry->historyConfidence > 9; //8 is the reset point.
 
-        
-        if(entry->reuseConfidence > 7 && randomChance(8,8)) {
-           if(should_pf) historyNonHistory++;
-           else historyNonHistory--;
-          
-        }
-        
         if(entry->reuseConfidence > 7) global_timestamp++;
         if(should_pf) global_timestamp+=15;
+
     }
 
     if(entry==nullptr && randomChance(8,8)){ //only start adding samples for frequent entries.
@@ -200,17 +194,14 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		
     		int64_t distance = entry->local_timestamp - sentry->local_timestamp;
 		if(distance > 0 && distance < max_size) entry->reuseConfidence++; else entry->reuseConfidence--;
-    		int64_t gdistance = reuse_timer - sentry->globalReuseDistance;
     		if(distance > 0) { //sometimes it's lower - perhaps because entry replaced???
 			if(entry->historied_this_round) {
 				target_size -= entry->reuseDistance;
-				sum_deviation -= entry->deviation;
+				//sum_deviation -= entry->deviation;
 			}
 			entry->reuseDistance = !entry->reuseSet ?
     		  	    distance : (distance >> 3) + ((7*entry->reuseDistance)>>3);
     		  	entry->reuseSet = true;
-    		  	entry->globalReuseDistance = entry->globalReuseDistance == -1?
-    		  	    gdistance : (gdistance >> 3) + ((7*entry->globalReuseDistance)>>3);
     		  	
     			int absdist = distance - entry->reuseDistance;
     			if(absdist < 0) absdist = -absdist;
@@ -218,14 +209,15 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
   		 	
   		 	if(entry->historied_this_round) {
 				target_size += entry->reuseDistance;
-				sum_deviation += entry->deviation;
+				//sum_deviation += entry->deviation;
 			}
     		}
 
      	    	DPRINTF(HWPrefetch, "Found reuse for addr %x, PC %x, distance %ld (train %ld vs sample %ld) confidence %d\n",addr, pc, distance, entry->local_timestamp, sentry->local_timestamp, entry->reuseConfidence+0);
     		
     		//TODO: What benefit do we get from checking both? Do we need to check last three?
-    		if(entry->lastAddress == sentry->last || entry->lastLastAddress == sentry->last || owntags->findBlock(sentry->last<<lBlkSize,is_secure)) {
+    		
+    		if(entry->lastAddress == sentry->last || entry->lastLastAddress == sentry->last || (owntags->findBlock(sentry->last<<lBlkSize,is_secure) && !owntags->findBlock(sentry->last<<lBlkSize,is_secure)->wasPrefetched())) {
     			entry->historyConfidence++;
     			if(entry->replaceRate < 8) entry->replaceRate.reset();
     		}
@@ -248,9 +240,9 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		if(sentry->pc !=0) {
     			    TrainingUnitEntry *pentry = trainingUnit.findEntry(sentry->pc, is_secure);
     			    if(pentry != nullptr) {
-    			    	    uint64_t distance = pentry->local_timestamp - sentry->local_timestamp;
+    			    	    int64_t distance = pentry->local_timestamp - sentry->local_timestamp;
     			    	    DPRINTF(HWPrefetch, "Replacing PC %x with PC %x, old distance %d\n",sentry->pc, pc, distance);
-    			    	    if(distance > max_size || (pentry->reuseDistance !=-1 && distance > pentry->reuseDistance*4)) {
+    			    	    if(distance > max_size) {
     			    	        //TODO: Change max size to be relative, based on current tracking set?
     			            	trainingUnit.accessEntry(pentry);
     			            	if(!sentry->reused) pentry->reuseConfidence--;
@@ -266,11 +258,15 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		sentry->pc = pc;
     		sentry->reused = false;
     		sentry->local_timestamp = entry->local_timestamp+1;
-    		sentry->globalReuseDistance = reuse_timer;
     		sentry->last = entry->lastAddress;
     	}
     }
 
+
+    if(useHawkeye && correlated_addr_found && should_pf) {
+        	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
+        	should_pf = entry->hawkConfidence>7;
+    }
 
     if(correlated_addr_found && should_pf) {
 
@@ -283,7 +279,6 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
             	else {
                 	
             	        sum_deviation+= entry->deviation;
-            	        paths++;
             		target_size += entry->reuseDistance;
             		DPRINTF(HWPrefetch, "Starting to PF PC %x with distance %d\n",pc, entry->reuseDistance);
             	        entry->was_twodist_pf = entry->currently_twodist_pf;
@@ -297,15 +292,32 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
             }
     }
     
-    while(target_size + 2*sum_deviation  /*/root paths*/ > current_size
-            		     && target_size > size_increment / 8 && historyNonHistory > 16 && current_size < max_size) {
+    while(target_size + 2*sum_deviation > current_size
+            		     && target_size > size_increment / 8 && current_size < max_size) {
             		        //check for size_increment to leave empty if unlikely to be useful.
             			current_size += size_increment;
             			assert(current_size <= max_size);
             			assert(cachetags->getWayAllocationMax()>1);
             			cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
-            			addressMappingCache.setWayAllocationMax(addressMappingCache.getWayAllocationMax()+historyLineAssoc);
-            			assert(addressMappingCache.getWayAllocationMax()<=maxLineAssoc);
+
+            	std::vector<AddressMapping> ams;
+             	for(AddressMapping am: addressMappingCache) {
+            		if(am.isValid()) ams.push_back(am);
+            	}
+            	
+            	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  		if(thsa) { thsa->ways++; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
+  		else assert(0);
+            	//TODO: rearrange conditionally
+		for(AddressMapping am: ams) {
+		    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false, true);
+		    		   mapping->address = am.address;
+		    		   mapping->index=am.index;
+		    		   mapping->confident = am.confident;
+		    		   mapping->lookupIndex=am.lookupIndex;
+		    		   //mapping->replacementData=am.replacementData;
+		} 
+		  
             			//increase associativity of the set structure by 1!
             			//Also, decrease LLC cache associativity by 1.
     }
@@ -314,16 +326,38 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     if(global_timestamp > 16*(current_size+size_increment)) {
     	//reset the timestamp and forgive on currently blocking.
 
-    	while((current_size > target_size + size_increment / 4 + 2* sum_deviation /*/root paths*/ || historyNonHistory < 8) && current_size >= size_increment) {
+    	while((current_size > target_size + size_increment / 2 + 2* sum_deviation) && current_size >= size_increment) {
     		//reduce the assoc by 1.
     		//Also, increase LLC cache associativity by 1.
     		//Do we want more hysteresis than this?
     		current_size -= size_increment;
 	    	assert(current_size >= 0);
-	    	assert(addressMappingCache.getWayAllocationMax()>=historyLineAssoc);
+
     		cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()+1);
-    		addressMappingCache.setWayAllocationMax(addressMappingCache.getWayAllocationMax()-historyLineAssoc);
-    		if(historyNonHistory < 8) break;
+
+	    	std::vector<AddressMapping> ams;
+		    	
+		for(AddressMapping am: addressMappingCache) {
+		    		if(am.isValid()) ams.push_back(am);
+		}
+	    	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  				if(thsa) { assert(thsa->ways >0); thsa->ways--; }
+  				else assert(0);
+            	//TODO: rearrange conditionally
+            	
+            	if(current_size >0) {
+		      	for(AddressMapping am: ams) {
+		    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false, true);
+		    		   mapping->address = am.address;
+		    		   mapping->index=am.index;
+		    		   mapping->confident = am.confident;
+		    		   mapping->lookupIndex=am.lookupIndex;
+		    	}    	
+            	}
+            	
+            	for(AddressMapping& am: addressMappingCache) {
+		    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways) am.invalidate();
+		}
 
     	}
 
@@ -337,25 +371,19 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     	global_timestamp = 0;
     	target_size = 0;
 	sum_deviation = 0;
-	paths=0;
     }
 
     if(entry!= nullptr && entry->currently_blocking) should_pf = false;
-    
-    if(entry && should_pf && !entry->reuseSet && (addressMappingCache.getWayAllocationMax()==0)) { target_size++; entry->reuseDistance++;} 
 
-    if (correlated_addr_found && should_pf && (addressMappingCache.getWayAllocationMax()>0)) {
+    if (correlated_addr_found && should_pf && (current_size>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false);
+	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,false);
 	if(mapping == nullptr) {
-	        if(!entry->reuseSet) { 
-	        	target_size++;
-	        	entry->reuseDistance++;
-	        }
-        	mapping = getHistoryEntry(index, is_secure,true,false);
+        	mapping = getHistoryEntry(index, is_secure,true,false,false);
         	mapping->address = target;
-        	mapping->confident = !entry->reuseSet ? true : entry->historyConfidence > 12;
+        	mapping->index=index; //for HawkEye
+        	mapping->confident = entry->historyConfidence > 12;
         }
         assert(mapping != nullptr);
         bool confident = mapping->address == target || mapping->address == entry->lastAddress; //second one covers a shift to 2-off.
@@ -373,27 +401,39 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
         	}
         }
         
-        LookupMapping * lookupEntry = lookupCache.findEntry(target>>10, is_secure);
-        if(lookupEntry != nullptr) {
-           lookupEntry->address = target>>10;
-           lookupCache.accessEntry(lookupEntry);
-        } else {
-           lookupEntry = lookupCache.findVictim(target>>10);
-           lookupCache.insertEntry(target>>10, is_secure, lookupEntry);
-           lookupEntry->address = target>>10;
+        int index=0;
+        uint64_t time = -1;
+        if(lookupAssoc>0){
+		int lookupMask = (1024/lookupAssoc)-1;
+		int set = (target>>lookupOffset)&lookupMask;
+		for(int x=lookupAssoc*set;x<lookupAssoc*(set+1);x++) {
+			if(target>>lookupOffset == lookupTable[x]) {
+				index=x;
+				break;
+			}
+			if(time > lookupTick[x]) {
+				time = lookupTick[x];
+				index=x;
+			}
+		}
+		
+		lookupTable[index]=target>>lookupOffset;
+		lookupTick[index]=curTick();
+		mapping->lookupIndex=index;
         }
+        
     }
 
-    if(target != 0 && should_pf && (addressMappingCache.getWayAllocationMax()>0)) {
-  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true);
+    if(target != 0 && should_pf && (current_size>0)) {
+  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,false);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
   	 should_pf_twice = pf_target != nullptr
-  	         && entry->historyConfidence > 14 && entry->reuseConfidence>14 && pf_target->confident;
+  	         && entry->historyConfidence > 14 && entry->reuseConfidence>14 /*&& pf_target->confident*/;
    	 unsigned max = should_pf_twice? degree : (should_pf? 1 : 0);
    	 //if(pf_target == nullptr && should_pf) DPRINTF(HWPrefetch, "Target not found for %x, PC %x\n", target << lBlkSize, pc);
    	 while (pf_target != nullptr && deg < max &&
-   	 (pf_target->confident || (entry->historyConfidence > 13))
+   	 (pf_target->confident || entry->historyConfidence > 13)
    	 ) { //TODO: do we always pf at distance 1 if not confident?
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
     		int extraDelay = cacheDelay;
@@ -402,18 +442,24 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     			if(time >= cacheDelay) extraDelay = 0;
     			else if (time < cacheDelay) extraDelay = time;
     		}
-    		LookupMapping * lookupEntry = lookupCache.findEntry(pf_target->address>>10, is_secure);
-    		Addr lookup = lookupEntry==nullptr? 0 : (lookupEntry->address<<10)+(pf_target->address&1023);
     		
-    		if(lookup == pf_target->address)prefetchStats.lookupCorrect++;
-    		else prefetchStats.lookupWrong++;
+    		Addr lookup = pf_target->address;
+   	        if(lookupAssoc>0){
+	   	 	int index=pf_target->lookupIndex;
+	   	 	int lookupMask = (1<<lookupOffset)-1;
+	   	 	lookup = (lookupTable[index]<<lookupOffset) + ((pf_target->address)&lookupMask);
+	   	 	lookupTick[index]=curTick();
+	   	 	if(lookup == pf_target->address)prefetchStats.lookupCorrect++;
+	    		else prefetchStats.lookupWrong++;
+    		}
     		
-    		if(extraDelay == cacheDelay && lookup !=0) addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
+    		if(extraDelay == cacheDelay) addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
     		delay += extraDelay;
     		//if(extraDelay < cacheDelay && should_pf_twice && max<4) max++;
     		deg++;
     		
-    		if(deg<max && lookup != 0) pf_target = getHistoryEntry(lookup, is_secure,false,true);
+    		if(deg<max && pf_target->confident) pf_target = getHistoryEntry(lookup, is_secure,false,true,false);
+    		else pf_target = nullptr;
 
    	 }
     }
@@ -431,8 +477,19 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
 }
 
 Triangel::AddressMapping*
-Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly)
+Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool clearing)
 {
+
+    
+    TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+  				if(!thsa)  assert(0);
+    int index= paddr % (way_idx.size()); //Not quite the same indexing strategy, but close enough.
+    
+    if(way_idx[index] != thsa->ways) {
+    	if(way_idx[index] !=0) prefetchStats.metadataAccesses+= thsa->ways + way_idx[index];
+    	way_idx[index]=thsa->ways;
+    }
+
     if(readonly) { //check the cache first.
         AddressMapping *pf_entry =
         	prefetchedCache.findEntry(paddr, is_secure);
@@ -453,6 +510,7 @@ Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly)
         if(!add) return nullptr;
         ps_entry = addressMappingCache.findVictim(paddr);
         assert(ps_entry != nullptr);
+        if(useHawkeye && !clearing) for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
 	assert(!ps_entry->isValid());
         addressMappingCache.insertEntry(paddr, is_secure, ps_entry);
     }
@@ -476,16 +534,17 @@ uint32_t
 TriangelHashedSetAssociative::extractSet(const Addr addr) const
 {
 	//Input is already blockIndex so no need to remove block again.
-    const Addr offset = addr;
-        return offset & setMask;   //setMask is numSets-1
-
-    //The below is a literal interpretation of Triage-ISR. It complicates things here (and doesn't help performance without stream) so I avoid it.
-   /* const Addr hash1 = offset & ((1<<16)-1);
+    Addr offset = addr;
+    
+    const Addr hash1 = offset & ((1<<16)-1);
     const Addr hash2 = (offset >> 16) & ((1<<16)-1);
         const Addr hash3 = (offset >> 32) & ((1<<16)-1);
-    return (hash1 ^ hash2 ^ hash3) & setMask;   //setMask is numSets-1
-    */
+    
+        offset = ((hash1 ^ hash2 ^ hash3) * max_ways) + (extractTag(addr) % ways);
+        return offset & setMask;   //setMask is numSets-1
+
 }
+
 
 Addr
 TriangelHashedSetAssociative::extractTag(const Addr addr) const
@@ -496,41 +555,14 @@ TriangelHashedSetAssociative::extractTag(const Addr addr) const
     //Description in Triage-ISR confuses whether the index is just the 16 least significant bits,
     //or the weird index above. The tag can't be the remaining bits if we use the literal representation!
 
-    //Here I just remove the set offset and xor together the rest.
     //Really, xoring in the set bits is innocuous if they're all the same.
 
-    Addr offset = addr >> tagShift;
+    Addr offset = addr;
     int result = 0;
     
-    const int shiftwidth=9;
+    const int shiftwidth=10;
 
-    for(int x=0; x<64-tagShift; x+=shiftwidth) {
-       result ^= (offset & ((1<<shiftwidth)-1));
-       offset = offset >> shiftwidth;
-    }
-    return result;
-}
-
-
-uint32_t
-LookupHashedSetAssociative::extractSet(const Addr addr) const
-{
-	//Input is already blockIndex so no need to remove block again.
-    const Addr offset = addr;
-        return offset & setMask;   //setMask is numSets-1
-
-}
-
-Addr
-LookupHashedSetAssociative::extractTag(const Addr addr) const
-{
-
-    Addr offset = addr >> (tagShift);
-    int result = 0;
-    
-    const int shiftwidth=5;
-
-    for(int x=0; x<64-tagShift; x+=shiftwidth) {
+    for(int x=0; x<64; x+=shiftwidth) {
        result ^= (offset & ((1<<shiftwidth)-1));
        offset = offset >> shiftwidth;
     }
