@@ -95,7 +95,7 @@ class AssociativeSet
      */
     void accessEntry(Entry *entry);
     
-    void weightedAccessEntry(Entry *entry, int weight);
+    void weightedAccessEntry(Entry *entry, int weight, bool fill);
 
     /**
      * Find a victim to be replaced

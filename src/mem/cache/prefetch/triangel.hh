@@ -71,6 +71,8 @@ class Triangel : public Queued
 
     BaseTags* cachetags;
     const unsigned cacheDelay;
+    const bool should_lookahead;
+    const bool should_rearrange;
     
     BaseTags* owntags;
 
@@ -82,9 +84,11 @@ class Triangel : public Queued
     int current_size;
     int target_size;
     const int maxWays;    
-    int sum_deviation;
+    SatCounter8  globalReuseConfidence;
+    SatCounter8  globalHistoryConfidence;
 
     bloom bl;
+    int bloomset=-1;
     
     std::vector<int> way_idx;
    
@@ -94,23 +98,17 @@ class Triangel : public Queued
         Addr lastAddress;
         Addr lastLastAddress;
         int64_t local_timestamp;
-        int reuseDistance;
-        bool reuseSet;
-        int deviation;
         SatCounter8  reuseConfidence;
         SatCounter8  historyConfidence;
         SatCounter8 replaceRate;
         SatCounter8 hawkConfidence;
         bool lastAddressSecure;
         bool lastLastAddressSecure;
-        bool historied_this_round;
-        bool currently_blocking;
         bool currently_twodist_pf;
-        bool was_twodist_pf;
 
 
 
-        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0), reuseDistance(0), reuseSet(false), deviation(0), reuseConfidence(4,8), historyConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),historied_this_round(false),currently_blocking(false)
+        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0),reuseConfidence(4,8), historyConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),currently_twodist_pf(false)
         {}
 
         void
@@ -120,21 +118,16 @@ class Triangel : public Queued
                 lastAddress = 0;
                 lastLastAddress = 0;
                 local_timestamp=0;
-                reuseDistance = 0;
-                reuseSet = false;
                 reuseConfidence.reset();
                 historyConfidence.reset();
                 replaceRate.reset();
-                historied_this_round = false;
-                currently_blocking = false;
                 currently_twodist_pf = false;
-                was_twodist_pf = false;
         }
     };
     /** Map of PCs to Training unit entries */
     AssociativeSet<TrainingUnitEntry> trainingUnit;
     
-        Addr lookupTable[1024];
+    Addr lookupTable[1024];
     uint64_t lookupTick[1024];
     const int lookupAssoc;
     const int lookupOffset;
@@ -292,7 +285,7 @@ class Triangel : public Queued
     AssociativeSet<AddressMapping> prefetchedCache;
     bool lastAccessFromPFCache;
 
-    AddressMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool clearing);
+    AddressMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool clearing, bool hawk);
 
   public:
     Triangel(const TriangelPrefetcherParams &p);

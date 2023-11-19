@@ -62,6 +62,13 @@ LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
 }
 
 void
+LRU::updateReplacement(const std::shared_ptr<ReplacementData>& replacement_data, const std::shared_ptr<ReplacementData>& old_replacement_data)
+{
+    std::static_pointer_cast<LRUReplData>(
+        replacement_data)->lastTouchTick = std::static_pointer_cast<LRUReplData>(old_replacement_data)->lastTouchTick;
+}
+
+void
 LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
     // Set last touch timestamp

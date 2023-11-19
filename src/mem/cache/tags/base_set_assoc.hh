@@ -213,7 +213,47 @@ class BaseSetAssoc : public BaseTags
     virtual void setWayAllocationMax(int ways) override
     {
         fatal_if(ways < 1, "Allocation limit must be greater than zero");
+       // int oldAssoc = allocAssoc;
         allocAssoc = ways;
+        
+               /* while(allocAssoc > ways) {
+          for(int x=0; x<numBlocks/indexingPolicy->assoc; x++) {
+			CacheBlk* blk = static_cast<CacheBlk*>(findBlockBySetAndWay(x,allocAssoc-1));
+			if(blk->isValid()) {
+				const std::vector<ReplaceableEntry*> entries =
+            			indexingPolicy->getPossibleEntries(regenerateBlkAddr(blk));
+            			const std::vector<ReplaceableEntry*> slice = std::vector<ReplaceableEntry*>(entries.begin(), entries.begin()+getWayAllocationMax());
+            			// Choose replacement victim from replacement candidates
+        			CacheBlk* victim = static_cast<CacheBlk*>(replacementPolicy->getVictim(slice));
+        			if(victim != blk && !victim->isSet(CacheBlk::DirtyBit)) {
+        				victim->invalidate();
+        				moveBlock(blk,victim);
+        			}
+			}
+		}      	
+       	  allocAssoc--;
+        }*/
+       /* if(oldAssoc<ways)return;
+        //PacketList writebacks;
+        for(int x=0; x<numBlocks/indexingPolicy->assoc; x++) {
+		for(int y=getWayAllocationMax(); y<indexingPolicy->assoc; y++) {
+			CacheBlk* blk = static_cast<CacheBlk*>(findBlockBySetAndWay(x,y));
+			if(!blk->isSet(CacheBlk::DirtyBit) && blk->isValid()) blk->invalidate();//evictBlock(blk,writebacks);
+		}
+        }
+        
+        //	if(!writebacks.empty())doWritebacks(writebacks,clockEdge()); 
+        */
+        
+	//This is an underapproximation. It should clear dirties too.
+
+	        	
+    }
+    
+    virtual void clearSetWay(int set, int way) override {
+    			CacheBlk* blk = static_cast<CacheBlk*>(findBlockBySetAndWay(set,indexingPolicy->assoc-1-way));
+			if(!blk->isSet(CacheBlk::DirtyBit) && blk->isValid()) blk->invalidate();//evictBlock(blk,writebacks);
+			else if(blk->isSet(CacheBlk::DirtyBit) && blk->isValid()) badBlocks.push_back(blk);
     }
 
     /**

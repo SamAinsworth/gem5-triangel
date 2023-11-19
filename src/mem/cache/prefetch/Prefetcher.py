@@ -712,7 +712,7 @@ class TriagePrefetcher(QueuedPrefetcher):
     sample_two_history= Param.Bool(False,"Add 2nd history into hawkeye calculation")
     store_unreliable =Param.Bool(True,"Store history for unreliable PCs")
     cachetags = Param.BaseTags(Parent.tags, "Cache we're storing metadata in")
-
+    should_rearrange = Param.Bool(True,"Should rearrange on index change")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
     
     degree = Param.Int(1, "Number of prefetches to generate")
@@ -737,7 +737,7 @@ class TriagePrefetcher(QueuedPrefetcher):
         "Indexing policy of the training unit",
     )
     training_unit_replacement_policy = Param.BaseReplacementPolicy(
-        LRURP(), "Replacement policy of the training unit"
+        RRIPRP(), "Replacement policy of the training unit"
     )
     
     address_map_actual_entries = Param.MemorySize(
@@ -764,7 +764,7 @@ class TriagePrefetcher(QueuedPrefetcher):
         "Indexing policy of the PC table",
     )
     address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
-        BRRIPRP(num_bits=3,btp=0), "Replacement policy of the PC table"
+        WeightedLRURP(), "Replacement policy of the Markov table"
     )
     hawkeye_threshold=Param.Unsigned(8,"Temporal/Non-temporal threshold (lower more permissive)")    
 
@@ -788,8 +788,9 @@ class TriangelPrefetcher(QueuedPrefetcher):
     prefetch_on_pf_hit = True  # TODO: check these!
     cross_pages = True
 
+    should_lookahead = Param.Bool(True,"Should perform lookahead prefetching")
     cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
-
+    should_rearrange = Param.Bool(True,"Should rearrange on index change")
     use_hawkeye= Param.Bool(False,"Add hawkeye after the sample cache")
     #  use_requestor_id = Param.Bool(True, "Use requestor id based history")
 

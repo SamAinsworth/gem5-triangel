@@ -71,6 +71,7 @@ class Triage : public Queued
 
     BaseTags* cachetags;
     const unsigned cacheDelay;
+    const bool should_rearrange;    
     const bool store_unreliable;
 
 

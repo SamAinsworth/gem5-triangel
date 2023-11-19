@@ -80,11 +80,11 @@ AssociativeSet<Entry>::accessEntry(Entry *entry)
 
 template<class Entry>
 void
-AssociativeSet<Entry>::weightedAccessEntry(Entry *entry, int weight)
+AssociativeSet<Entry>::weightedAccessEntry(Entry *entry, int weight, bool fill)
 {
     gem5::replacement_policy::WeightedLRU* wlru = dynamic_cast<gem5::replacement_policy::WeightedLRU*>(replacementPolicy);
     if(wlru) wlru->touch(entry->replacementData, weight);
-    else accessEntry(entry);
+    else if(!fill) accessEntry(entry);  //not fill for RRIPs
 }
 
 template<class Entry>
