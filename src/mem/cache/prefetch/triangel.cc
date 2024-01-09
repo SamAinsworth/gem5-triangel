@@ -72,8 +72,6 @@ Triangel::Triangel(
     current_size(0),
     target_size(0),
     maxWays(p.address_map_max_ways),    
-    globalReuseConfidence(4,8),
-    globalHistoryConfidence(4,8),
     bl(),
     bloomset(-1),
     way_idx(p.address_map_actual_entries/(p.address_map_max_ways*p.address_map_actual_cache_assoc),0),
@@ -81,7 +79,8 @@ Triangel::Triangel(
                  p.training_unit_indexing_policy,
                  p.training_unit_replacement_policy),
     lookupAssoc(p.lookup_assoc),
-    lookupOffset(p.lookup_offset),                 
+    lookupOffset(p.lookup_offset),        
+    setPrefetch(cachetags->getWayAllocationMax(),SatCounter8(8,128)),      
     useHawkeye(p.use_hawkeye),
     sampleUnit(p.sample_assoc,
     		  p.sample_entries,
@@ -112,6 +111,10 @@ Triangel::Triangel(
 	for(int x=0;x<64;x++) {
 		hawksets[x].setMask = p.address_map_rounded_entries/ hawksets[x].maxElems - 1;
 		hawksets[x].reset();
+	}
+	
+	for(int x=0;x<64;x++) {
+		sizeDuels[x].reset(size_increment/p.address_map_actual_cache_assoc - 1 ,p.address_map_actual_cache_assoc,cachetags->getWayAllocationMax());
 	}
 	for(int x=0;x<1024;x++) {
 		lookupTable[x]=0;
@@ -168,8 +171,8 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
         index = entry->lastAddress;
 
         if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
-	if(entry->reuseConfidence >= superHistory) entry->currently_twodist_pf=true;
-	if(entry->reuseConfidence < upperHistory) entry->currently_twodist_pf=false; 
+	if(entry->highHistoryConfidence >= superHistory) entry->currently_twodist_pf=true;
+	if(entry->historyConfidence < upperHistory) entry->currently_twodist_pf=false; 
         //if very sure, index should be lastLastAddress. TODO: We could also try to learn timeliness here, by tracking PCs at the MSHRs.
         if(entry->currently_twodist_pf && should_lookahead) index = entry->lastLastAddress;
         target = addr;
@@ -198,10 +201,10 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     	if(tentry!= nullptr && !tentry->used) {
     		tentry->used=true;
     		entry->historyConfidence++;
-    		globalHistoryConfidence++;
+    		entry->historyConfidence++;// unbias
     		entry->historyConfidence++;
-    		globalHistoryConfidence++;
     		
+    		for(int x=0;x<6;x++)entry->highHistoryConfidence++;
     	}
     	
     	//Check sample table for entry.
@@ -210,7 +213,7 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		sentry->reused = true;
     		
     		int64_t distance = entry->local_timestamp - sentry->local_timestamp;
-		if(distance > 0 && distance < max_size) { entry->reuseConfidence++; globalReuseConfidence++; }else { entry->reuseConfidence--; globalReuseConfidence--;}
+		if(distance > 0 && distance < max_size) { entry->reuseConfidence++; }else { entry->reuseConfidence--;}
 
 
      	    	DPRINTF(HWPrefetch, "Found reuse for addr %x, PC %x, distance %ld (train %ld vs sample %ld) confidence %d\n",addr, pc, distance, entry->local_timestamp, sentry->local_timestamp, entry->reuseConfidence+0);
@@ -219,14 +222,15 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		
     		if(entry->lastAddress == sentry->last || entry->lastLastAddress == sentry->last || (owntags->findBlock(sentry->last<<lBlkSize,is_secure) && !owntags->findBlock(sentry->last<<lBlkSize,is_secure)->wasPrefetched())) {
     			entry->historyConfidence++;
-    			globalHistoryConfidence++;
+    			entry->highHistoryConfidence++;
     			if(entry->replaceRate < 8) entry->replaceRate.reset();
     		}
     		
     		else {
     			entry->historyConfidence--;
-    			globalHistoryConfidence--;
-    			TestEntry* tentry = testUnit.findVictim(addr);
+    			entry->historyConfidence--;//bias
+    			for(int x=0;x<5;x++)entry->highHistoryConfidence--;
+			TestEntry* tentry = testUnit.findVictim(addr);
     			testUnit.insertEntry(sentry->last, is_secure, tentry);
     			tentry->pc = pc;
     			tentry->used = false;
@@ -249,7 +253,6 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     			            	trainingUnit.accessEntry(pentry);
     			            	if(!sentry->reused) { 
     			            		pentry->reuseConfidence--;
-    			            		globalReuseConfidence--;
     			            	}
     			            	entry->replaceRate++; //only replacing oldies -- can afford to be more aggressive.
     			            } else if(distance > 0) { //distance goes -ve due to lack of training-entry space
@@ -266,14 +269,100 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		sentry->last = entry->lastAddress;
     	}
     }
+    
+    for(int x=0;x<64;x++) {
+	int res =    	sizeDuels[x].checkAndInsert(addr,should_pf); //TODO: combine with hawk?
+	if(res==0)continue;
+	const int ratioNumer=3;
+	const int ratioDenom=4;
+	bool cache_hit = res > 0;
+	if(!cache_hit) res = -res;
+	res--;
+	assert(res<setPrefetch.size() && res>=0);
+	if(cache_hit) setPrefetch[setPrefetch.size()-1-res]--;
+	else for(int y=0;y<(ratioNumer*sizeDuels[x].temporalModMax)/ratioDenom;y++) setPrefetch[res]++;
+	
+	//if(cache_hit) printf("Cache hit\n");
+	//else printf("Prefetch hit\n");
+    }
+    
+    int duelTargetSizeUpper = 0;
+    //int duelTargetSizeHysteresis = 0;
+    for(int x=0;x<setPrefetch.size();x++) {
+    	if(setPrefetch[x]>192) duelTargetSizeUpper+= size_increment;
+    	//if(setPrefetch[x]<128) break;
+    }
+    
+    int curTargetSize = duelTargetSizeUpper > max_size? max_size:  duelTargetSizeUpper; //minimum
+    
+    if(curTargetSize > target_size) target_size = curTargetSize;
+    //if(duelTargetSizeHysteresis <= current_size && duelTargetSizeHysteresis >= target_size) target_size = duelTargetSizeHysteresis;
+    
+    bool should_shrink = false;
+    if(global_timestamp > 2000000) {
+    	if(current_size > target_size) {
+    		should_shrink=true;
+    	}
+    	//Reset after 2 million prefetch accesses -- not quite the same as after 30 million insts but close enough
+     }
+    
+    if(target_size > current_size || should_shrink) {
+    	current_size = target_size;
+	printf("size: %d, tick %ld \n",current_size,curTick());
+	assert(current_size >= 0);
+	
+	uint64_t newMask = 1;
+	while(newMask < current_size) newMask=newMask<<1;
+	for(int x=0;x<64;x++) {
+		hawksets[x].setMask = newMask;
+		hawksets[x].reset();
+	}
+	std::vector<AddressMapping> ams;
+		     	if(should_rearrange) {		    	
+				for(AddressMapping am: addressMappingCache) {
+				    		if(am.isValid()) ams.push_back(am);
+				}
+				for(AddressMapping& am: addressMappingCache) {
+			    		am.invalidate(); //for RRIP's sake
+			    	}
+		    	}
+		    	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+	  				if(thsa) { thsa->ways = current_size/size_increment; }
+	  				else assert(0);
+		    	//rearrange conditionally
+		        if(should_rearrange) {        	
+			    	if(current_size >0) {
+				      	for(AddressMapping am: ams) {
+				    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
+				    		   mapping->address = am.address;
+				    		   mapping->index=am.index;
+				    		   mapping->confident = am.confident;
+				    		   mapping->lookupIndex=am.lookupIndex;
+				    		   addressMappingCache.weightedAccessEntry(mapping,1,false); //For RRIP, touch
+				    	}    	
+			    	}
+		    	}
+		    	
+		    	for(AddressMapping& am: addressMappingCache) {
+			    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways)  am.invalidate();
+			}
+		    	cachetags->setWayAllocationMax(setPrefetch.size()-thsa->ways);  	
+    } 
+
+    if(global_timestamp > 2000000) {
+    	target_size=0;
+    	global_timestamp=0;
+    	//Reset after 2 million prefetch accesses -- not quite the same as after 30 million insts but close enough
+     }
 
 
     if(useHawkeye && correlated_addr_found && should_pf) {
         	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
         	should_hawk = entry->hawkConfidence>7;
     }
+    
 
-    if(correlated_addr_found && should_pf) {
+ /*   if(correlated_addr_found && should_pf) {
     	if(bloomset==-1) bloomset = index&127;
     	if((index&127)==bloomset) {
         	int add = bloom_add(&bl, &index, sizeof(Addr));
@@ -368,7 +457,7 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     	bloomset=-1;
     }
 
-
+*/
     if (correlated_addr_found && should_pf && (current_size>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
@@ -377,7 +466,7 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
         	mapping = getHistoryEntry(index, is_secure,true,false,false, should_hawk);
         	mapping->address = target;
         	mapping->index=index; //for HawkEye
-        	mapping->confident = entry->historyConfidence > 12;
+        	mapping->confident = entry->highHistoryConfidence > 12;
         }
         assert(mapping != nullptr);
         bool confident = mapping->address == target; 
@@ -423,10 +512,10 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
   	 should_pf_twice = pf_target != nullptr
-  	         && entry->reuseConfidence>superHistory /*&& pf_target->confident*/;
+  	         && entry->highHistoryConfidence>superHistory /*&& pf_target->confident*/;
    	 unsigned max = should_pf_twice? degree : (should_pf? 1 : 0);
    	 //if(pf_target == nullptr && should_pf) DPRINTF(HWPrefetch, "Target not found for %x, PC %x\n", target << lBlkSize, pc);
-   	 while (pf_target != nullptr && deg < max  && (pf_target->confident || entry->reuseConfidence>superHistory)
+   	 while (pf_target != nullptr && deg < max  /*&& (pf_target->confident || entry->highHistoryConfidence>upperHistory)*/
    	 ) { //TODO: do we always pf at distance 1 if not confident?
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
     		int extraDelay = cacheDelay;
@@ -451,7 +540,7 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
     		//if(extraDelay < cacheDelay && should_pf_twice && max<4) max++;
     		deg++;
     		
-    		if(deg<max && pf_target->confident) pf_target = getHistoryEntry(lookup, is_secure,false,true,false, should_hawk);
+    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(lookup, is_secure,false,true,false, should_hawk);
     		else pf_target = nullptr;
 
    	 }

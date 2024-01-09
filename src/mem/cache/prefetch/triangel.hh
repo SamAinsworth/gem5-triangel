@@ -84,8 +84,6 @@ class Triangel : public Queued
     int current_size;
     int target_size;
     const int maxWays;    
-    SatCounter8  globalReuseConfidence;
-    SatCounter8  globalHistoryConfidence;
 
     bloom bl;
     int bloomset=-1;
@@ -100,6 +98,7 @@ class Triangel : public Queued
         int64_t local_timestamp;
         SatCounter8  reuseConfidence;
         SatCounter8  historyConfidence;
+        SatCounter8 highHistoryConfidence;
         SatCounter8 replaceRate;
         SatCounter8 hawkConfidence;
         bool lastAddressSecure;
@@ -108,7 +107,7 @@ class Triangel : public Queued
 
 
 
-        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0),reuseConfidence(4,8), historyConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),currently_twodist_pf(false)
+        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0),reuseConfidence(4,8), historyConfidence(4,8), highHistoryConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),currently_twodist_pf(false)
         {}
 
         void
@@ -131,6 +130,101 @@ class Triangel : public Queued
     uint64_t lookupTick[1024];
     const int lookupAssoc;
     const int lookupOffset;
+    
+   
+  std::vector<SatCounter8> setPrefetch; 
+  struct SizeDuel
+  {
+  	int idx;
+  	uint64_t set;
+  	uint64_t setMask;
+  	uint64_t temporalMod; //[0..12] Entries Per Line
+  	
+  	uint64_t temporalModMax; //12 by default
+  	uint64_t cacheMaxAssoc;
+  	
+  	
+  	std::vector<Addr> cacheAddrs; // [0..16] should be set by the nsets of the L3 cache.
+  	std::vector<uint64_t> cacheAddrTick;
+  	std::vector<Addr> temporalAddrs;
+  	std::vector<uint64_t> temporalAddrTick;
+  	
+  	SizeDuel()
+        {
+        }
+        
+        void reset(uint64_t mask, uint64_t modMax, uint64_t cacheAssoc) {
+        	setMask=mask;
+        	temporalModMax = modMax;
+        	cacheMaxAssoc=cacheAssoc;
+        	cacheAddrTick.resize(cacheMaxAssoc);
+        	temporalAddrs.resize(cacheMaxAssoc);
+        	cacheAddrs.resize(cacheMaxAssoc);
+        	temporalAddrTick.resize(cacheMaxAssoc);
+        	for(int x=0;x<cacheMaxAssoc;x++) {
+			cacheAddrTick[x]=0;
+			temporalAddrs[x]=0;
+			cacheAddrs[x]=0;
+			temporalAddrTick[x]=0;
+		}
+		set = random_mt.random<uint64_t>(0,setMask);
+		temporalMod = random_mt.random<uint64_t>(0,modMax-1); // N-1, as range is inclusive.	
+        }
+  	
+  	int checkAndInsert(Addr addr, bool should_pf) {
+	  	int ret = 0;
+	  	bool foundInCache=false;
+	  	bool foundInTemp=false;
+	  	if((addr & setMask) != set) return ret;
+  		for(int x=0;x<cacheMaxAssoc;x++) {
+  			if(addr == cacheAddrs[x]) {
+  				foundInCache=true; 
+	  				int index=cacheMaxAssoc-1;
+	  				for(int y=0;y<cacheMaxAssoc;y++) {
+	  					if(cacheAddrTick[x]>cacheAddrTick[y]) index--;
+	  					assert(index>=0);
+	  				}  
+	  				cacheAddrTick[x] = curTick();
+	  				ret = index+1;		
+  			}
+  			if(should_pf && addr == temporalAddrs[x]) {
+  				foundInTemp=true;
+    				if(ret==0) {
+	  				int index=cacheMaxAssoc-1;
+	  				for(int y=0;y<cacheMaxAssoc;y++) {
+	  					if(temporalAddrTick[x]>temporalAddrTick[y]) index--;
+	  					assert(index>=0);
+	  				}  
+	  				temporalAddrTick[x] = curTick();
+	  				ret = -1-index;
+	  			}
+	  		}
+  		}
+  		if(!foundInCache) {
+  			uint64_t oldestTick = (uint64_t)-1;
+  			int idx = -1;
+  			for(int x=0; x<cacheMaxAssoc;x++) {
+  				if(cacheAddrTick[x]<oldestTick) {idx = x; oldestTick = cacheAddrTick[x];}
+  			}
+  			assert(idx>=0);
+  			cacheAddrs[idx]=addr;
+  			cacheAddrTick[idx]=curTick();
+  		}
+  		if(!foundInTemp && should_pf && (((addr / (setMask+1)) % temporalModMax) == temporalMod)) {
+  			uint64_t oldestTick = (uint64_t)-1;
+  			int idx = -1;
+  			for(int x=0; x<cacheMaxAssoc;x++) {
+  				if(temporalAddrTick[x]<oldestTick) {idx = x; oldestTick = temporalAddrTick[x];}
+  			}
+  			assert(idx>=0);
+  			temporalAddrs[idx]=addr;
+  			temporalAddrTick[idx]=curTick();
+  		}  
+  		return ret;		
+  	}
+  
+  };
+  SizeDuel sizeDuels[64];
     
   struct Hawkeye
     {
