@@ -71,7 +71,7 @@ class Triage : public Queued
 
     BaseTags* cachetags;
     const unsigned cacheDelay;
-    const bool should_rearrange;    
+    const bool should_rearrange;
     const bool store_unreliable;
 
 
@@ -81,13 +81,13 @@ class Triage : public Queued
     int current_size;
     int target_size;
     const int maxWays;
-    
+
     const int hawkeyeThreshold;
 
     bloom bl;
-    
+
     std::vector<int> way_idx;
-    
+
     struct TrainingUnitEntry : public TaggedEntry
     {
         Addr lastAddress;
@@ -103,17 +103,17 @@ class Triage : public Queued
                 lastAddress = 0;
                 temporal.reset();
         }
-        
-        
+
+
     };
     /** Map of PCs to Training unit entries */
     AssociativeSet<TrainingUnitEntry> trainingUnit;
-    
+
     Addr lookupTable[1024];
     uint64_t lookupTick[1024];
     const int lookupAssoc;
     const int lookupOffset;
-    
+
     struct Hawkeye
     {
       int iteration;
@@ -123,15 +123,15 @@ class Triage : public Queued
       Addr logpcs[64];
       int logsize[64];
       int maxElems = 8;
-      
+
       Hawkeye(uint64_t mask) : iteration(0), set(0), setMask(mask)
         {
            reset();
         }
-        
+
       Hawkeye() : iteration(0), set(0)
         {       }
-      
+
       void reset() {
         iteration=0;
         for(int x=0;x<64;x++) {
@@ -141,7 +141,7 @@ class Triage : public Queued
         }
         set = random_mt.random<uint64_t>(0,setMask);
       }
-      
+
       void decrementOnLRU(Addr addr,AssociativeSet<TrainingUnitEntry>* trainer) {
       	 if((addr & setMask) != set) return;
          for(int y=iteration;y!=((iteration+1)&63);y=(y-1)&63) {
@@ -153,24 +153,24 @@ class Triage : public Queued
                	    		entry->temporal--;
                	    		//printf("%s evicted, pc %s, temporality %d\n",addr, pc,entry->temporal);
                	    	}
-               	    	
+
                	    }
                	    return;
                }
-         }            
+         }
       }
-      
+
       void add(Addr addr, Addr pc,AssociativeSet<TrainingUnitEntry>* trainer) {
         if((addr & setMask) != set) return;
         logaddrs[iteration]=addr;
         logpcs[iteration]=pc;
         logsize[iteration]=0;
 
-        
+
         TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
         if(entry!=nullptr) {
           for(int y=(iteration-1)&63;y!=iteration;y=(y-1)&63) {
-               
+
                if(logsize[y] == maxElems) {
                  //no match
                  //printf("%s above max elems, pc %s, temporality %d\n",addr, pc,entry->temporal-1);
@@ -184,21 +184,21 @@ class Triage : public Queued
                    for(int z=y;z!=iteration;z=(z+1)&63){
                    	logsize[z]++;
                    }
-                 	
+
                 break;
                }
-            }            
+            }
         }
         iteration++;
         iteration = iteration % 64;
       }
-      
+
     };
 
 
 
-    
-    
+
+
     Hawkeye hawksets[64];
 
     /** Address Mapping entry, holds an address and a confidence counter */
@@ -216,7 +216,7 @@ class Triage : public Queued
         invalidate() override
         {
                 TaggedEntry::invalidate();
-              
+
                 address = 0;
                 confident = false;
         }

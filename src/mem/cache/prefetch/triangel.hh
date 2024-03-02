@@ -74,16 +74,29 @@ class Triangel : public Queued
     const bool should_lookahead;
     const bool should_rearrange;
     
+    const bool use_scs;
+    const bool use_bloom;
+    const bool use_reuse;
+    const bool use_pattern;
+    const bool use_pattern2;
+    const bool use_mrb;
+    const bool perfbias;
+    const bool smallduel;
+    const bool timed_scs;
+    const bool useSampleConfidence;
+    
     BaseTags* owntags;
 
     bool randomChance(int r, int s);
     const int max_size;
     const int size_increment;
-    int64_t global_timestamp;
+    static int64_t global_timestamp;
     uint64_t lowest_blocked_entry;
-    int current_size;
-    int target_size;
+    static int current_size;
+    static int target_size;
     const int maxWays;    
+    
+    static bloom* blptr;
 
     bloom bl;
     int bloomset=-1;
@@ -132,7 +145,9 @@ class Triangel : public Queued
     const int lookupOffset;
     
    
-  std::vector<SatCounter8> setPrefetch; 
+  static std::vector<uint32_t> setPrefetch; 
+ 
+public:
   struct SizeDuel
   {
   	int idx;
@@ -148,11 +163,11 @@ class Triangel : public Queued
   	std::vector<uint64_t> cacheAddrTick;
   	std::vector<Addr> temporalAddrs;
   	std::vector<uint64_t> temporalAddrTick;
-  	
+  	std::vector<bool> inserted;
+
   	SizeDuel()
         {
         }
-        
         void reset(uint64_t mask, uint64_t modMax, uint64_t cacheAssoc) {
         	setMask=mask;
         	temporalModMax = modMax;
@@ -161,6 +176,7 @@ class Triangel : public Queued
         	temporalAddrs.resize(cacheMaxAssoc);
         	cacheAddrs.resize(cacheMaxAssoc);
         	temporalAddrTick.resize(cacheMaxAssoc);
+        	inserted.resize(cacheMaxAssoc,false);
         	for(int x=0;x<cacheMaxAssoc;x++) {
 			cacheAddrTick[x]=0;
 			temporalAddrs[x]=0;
@@ -185,19 +201,23 @@ class Triangel : public Queued
 	  					assert(index>=0);
 	  				}  
 	  				cacheAddrTick[x] = curTick();
-	  				ret = index+1;		
+	  				ret += index+1;	
   			}
   			if(should_pf && addr == temporalAddrs[x]) {
+  				
+  				
   				foundInTemp=true;
-    				if(ret==0) {
+  				
 	  				int index=cacheMaxAssoc-1;
 	  				for(int y=0;y<cacheMaxAssoc;y++) {
 	  					if(temporalAddrTick[x]>temporalAddrTick[y]) index--;
 	  					assert(index>=0);
 	  				}  
-	  				temporalAddrTick[x] = curTick();
-	  				ret = -1-index;
-	  			}
+
+	  				ret += 128*(index+1);
+	  			
+	  			temporalAddrTick[x] = curTick();
+	  			inserted[x]=true;
 	  		}
   		}
   		if(!foundInCache) {
@@ -214,9 +234,9 @@ class Triangel : public Queued
   			uint64_t oldestTick = (uint64_t)-1;
   			int idx = -1;
   			for(int x=0; x<cacheMaxAssoc;x++) {
-  				if(temporalAddrTick[x]<oldestTick) {idx = x; oldestTick = temporalAddrTick[x];}
-  			}
-  			assert(idx>=0);
+  				if(temporalAddrTick[x]<oldestTick) {idx = x; oldestTick = temporalAddrTick[x]; }
+			}  			
+assert(idx>=0);
   			temporalAddrs[idx]=addr;
   			temporalAddrTick[idx]=curTick();
   		}  
@@ -224,8 +244,10 @@ class Triangel : public Queued
   	}
   
   };
-  SizeDuel sizeDuels[64];
-    
+  SizeDuel sizeDuels[256];
+  static SizeDuel* sizeDuelPtr;
+
+
   struct Hawkeye
     {
       int iteration;
@@ -251,11 +273,11 @@ class Triangel : public Queued
         	logaddrs[x]=0;
         	logpcs[x]=0;
         }
-        set = random_mt.random<uint64_t>(0,setMask);
+        set = random_mt.random<uint64_t>(0,setMask-1);
       }
       
       void decrementOnLRU(Addr addr,AssociativeSet<TrainingUnitEntry>* trainer) {
-      	 if((addr & setMask) != set) return;
+      	 if((addr % setMask) != set) return;
          for(int y=iteration;y!=((iteration+1)&63);y=(y-1)&63) {
                if(addr==logaddrs[y]) {
                	    Addr pc = logpcs[y];
@@ -273,7 +295,7 @@ class Triangel : public Queued
       }
       
       void add(Addr addr,  Addr pc,AssociativeSet<TrainingUnitEntry>* trainer) {
-        if((addr & setMask) != set) return;
+        if((addr % setMask) != set) return;
         logaddrs[iteration]=addr;
         logpcs[iteration]=pc;
         logsize[iteration]=0;
@@ -344,6 +366,7 @@ class Triangel : public Queued
     	bool reused;
     	uint64_t local_timestamp;
     	Addr last;
+    	bool confident;
 
     	SampleEntry() : pc(0), reused(false), local_timestamp(0), last(0)
         {}
@@ -359,6 +382,7 @@ class Triangel : public Queued
                 reused = false;
                 local_timestamp=0;
                 last = 0;
+                confident=false;
         }
     };
     AssociativeSet<SampleEntry> sampleUnit;
@@ -367,6 +391,7 @@ class Triangel : public Queued
     struct TestEntry: public TaggedEntry
     {
     	Addr pc;
+    	uint64_t local_timestamp;
     	bool used;
     };
     AssociativeSet<TestEntry> testUnit;
@@ -374,6 +399,7 @@ class Triangel : public Queued
 
     /** History mappings table */
     AssociativeSet<AddressMapping> addressMappingCache;
+    static AssociativeSet<AddressMapping>* addressMappingCachePtr;
     
 
     AssociativeSet<AddressMapping> prefetchedCache;

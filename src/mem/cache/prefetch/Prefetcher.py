@@ -689,6 +689,7 @@ class PIFPrefetcher(QueuedPrefetcher):
             HWPProbeEventRetiredInsts(self, simObj, "RetiredInstsPC")
         )
 
+
 class TriageHashedSetAssociative(SetAssociative):
     type = "TriageHashedSetAssociative"
     cxx_class = "gem5::prefetch::TriageHashedSetAssociative"
@@ -707,21 +708,19 @@ class TriagePrefetcher(QueuedPrefetcher):
     prefetch_on_access = False
     prefetch_on_pf_hit = True  # TODO: check these!
     cross_pages = True
-    
-    sample_history= Param.Bool(False,"Add history into hawkeye calculation")
-    sample_two_history= Param.Bool(False,"Add 2nd history into hawkeye calculation")
-    store_unreliable =Param.Bool(True,"Store history for unreliable PCs")
+
+    sample_history = Param.Bool(False, "Add history into hawkeye calculation")
+    sample_two_history = Param.Bool(
+        False, "Add 2nd history into hawkeye calculation"
+    )
+    store_unreliable = Param.Bool(True, "Store history for unreliable PCs")
     cachetags = Param.BaseTags(Parent.tags, "Cache we're storing metadata in")
-    should_rearrange = Param.Bool(True,"Should rearrange on index change")
+    should_rearrange = Param.Bool(True, "Should rearrange on index change")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
-    
+
     degree = Param.Int(1, "Number of prefetches to generate")
-    lookup_assoc = Param.Unsigned(
-        16, "Associativity of the lookup table"
-    )
-    lookup_offset = Param.Unsigned(
-        11, "Offset of the lookup table"
-    )
+    lookup_assoc = Param.Unsigned(16, "Associativity of the lookup table")
+    lookup_offset = Param.Unsigned(11, "Offset of the lookup table")
     training_unit_assoc = Param.Unsigned(
         16, "Associativity of the training unit"
     )
@@ -739,13 +738,13 @@ class TriagePrefetcher(QueuedPrefetcher):
     training_unit_replacement_policy = Param.BaseReplacementPolicy(
         RRIPRP(), "Replacement policy of the training unit"
     )
-    
+
     address_map_actual_entries = Param.MemorySize(
         "262144", "Number of entries of the History table"
     )
     address_map_max_ways = Param.Unsigned(
         8, "Max reservation of the History Table"
-    )    
+    )
     address_map_actual_cache_assoc = Param.Unsigned(
         16, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
@@ -766,7 +765,9 @@ class TriagePrefetcher(QueuedPrefetcher):
     address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
         WeightedLRURP(), "Replacement policy of the Markov table"
     )
-    hawkeye_threshold=Param.Unsigned(8,"Temporal/Non-temporal threshold (lower more permissive)")    
+    hawkeye_threshold = Param.Unsigned(
+        8, "Temporal/Non-temporal threshold (lower more permissive)"
+    )
 
 
 class TriangelHashedSetAssociative(SetAssociative):
@@ -782,28 +783,32 @@ class TriangelPrefetcher(QueuedPrefetcher):
 
     # Do not consult stride prefetcher on instruction accesses
     on_inst = False
-    on_write = False
+    on_write = True
     on_miss = True
     prefetch_on_access = False
     prefetch_on_pf_hit = True  # TODO: check these!
     cross_pages = True
-
-    should_lookahead = Param.Bool(True,"Should perform lookahead prefetching")
+    use_scs = Param.Bool(True, "Should use second-chance sampler")
+    use_bloom = Param.Bool(False, "Should use bloom filter instead of dueller")
+    should_lookahead = Param.Bool(True, "Should perform lookahead prefetching")
     cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
-    should_rearrange = Param.Bool(True,"Should rearrange on index change")
-    use_hawkeye= Param.Bool(False,"Add hawkeye after the sample cache")
+    should_rearrange = Param.Bool(True, "Should rearrange on index change")
+    use_hawkeye = Param.Bool(False, "Add hawkeye after the sample cache")
+    use_reuse = Param.Bool(True, "Use ReuseConf")
+    use_pattern = Param.Bool(True, "Use PatternConf") 
+    use_pattern2 = Param.Bool(True, "Use Pattern2Conf")
+    use_mrb = Param.Bool(True, "Use ReuseBuffer")    
+    timed_scs = Param.Bool(False, "Use timed SCS")
+    perfbias = Param.Bool(False, "Bias away from energy efficiency")
+    smallduel = Param.Bool(False, "Use small set dueller")
     #  use_requestor_id = Param.Bool(True, "Use requestor id based history")
-
+    useSampleConfidence = Param.Bool(False, "Use sample confidence")
     degree = Param.Int(2, "Number of prefetches to generate")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
-    
+
     owntags = Param.BaseTags(Parent.tags, "Cache we belong to")
-    lookup_assoc = Param.Unsigned(
-        0, "Associativity of the lookup table"
-    )
-    lookup_offset = Param.Unsigned(
-        11, "Offset of the lookup table"
-    )    
+    lookup_assoc = Param.Unsigned(0, "Associativity of the lookup table")
+    lookup_offset = Param.Unsigned(11, "Offset of the lookup table")
     training_unit_assoc = Param.Unsigned(
         16, "Associativity of the training unit"
     )
@@ -827,7 +832,7 @@ class TriangelPrefetcher(QueuedPrefetcher):
     )
     address_map_max_ways = Param.Unsigned(
         8, "Max reservation of the History Table"
-    )    
+    )
     address_map_actual_cache_assoc = Param.Unsigned(
         12, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
@@ -850,7 +855,7 @@ class TriangelPrefetcher(QueuedPrefetcher):
     )
     prefetched_cache_assoc = Param.Int(
         2, "Associativity of the Prefetched Cache"
-    )    
+    )
     sample_assoc = Param.Int(2, "Associativity of the Sample Cache")
     sample_entries = Param.MemorySize(
         "256", "Number of entries of the Sample cache"
@@ -883,10 +888,8 @@ class TriangelPrefetcher(QueuedPrefetcher):
     prefetched_cache_replacement_policy = Param.BaseReplacementPolicy(
         FIFORP(), "Replacement policy of the Prefetched cache"
     )
-    
-    test_assoc = Param.Int(
-        2, "Associativity of the Prefetched Cache"
-    )
+
+    test_assoc = Param.Int(2, "Associativity of the Prefetched Cache")
     test_entries = Param.MemorySize(
         "32", "Number of entries of the Prefetched cache"
     )
@@ -901,4 +904,3 @@ class TriangelPrefetcher(QueuedPrefetcher):
     test_replacement_policy = Param.BaseReplacementPolicy(
         FIFORP(), "Replacement policy of the Prefetched cache"
     )
-

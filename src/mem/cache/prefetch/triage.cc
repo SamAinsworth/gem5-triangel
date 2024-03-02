@@ -63,7 +63,7 @@ Triage::Triage(
     degree(p.degree),
     cachetags(p.cachetags),
     cacheDelay(p.cache_delay),
-    should_rearrange(p.should_rearrange),    
+    should_rearrange(p.should_rearrange),
     store_unreliable(p.store_unreliable),
     max_size(p.address_map_actual_entries),
     size_increment(p.address_map_actual_entries/p.address_map_max_ways),
@@ -129,7 +129,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
         index = entry->lastAddress;
-            
+
     	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
         temporal = entry->temporal>=hawkeyeThreshold;
 
@@ -159,7 +159,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
             	assert(cachetags->getWayAllocationMax()>1);
             	cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
             	std::vector<AddressMapping> ams;
-             	
+
              	if(should_rearrange) {
 		     	for(AddressMapping am: addressMappingCache) {
 		    		if(am.isValid()) ams.push_back(am);
@@ -168,7 +168,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 		    		am.invalidate(); //for RRIP's sake
 		    	}
             	}
-            	
+
             	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
   		if(thsa) { thsa->ways++; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
   		else assert(0);
@@ -181,7 +181,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 			    		   mapping->lookupIndex=am.lookupIndex;
 			    		   addressMappingCache.weightedAccessEntry(mapping,1,false); //For RRIP, touch
 			}
-		}   
+		}
 
 
         }
@@ -198,7 +198,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     		current_size -= size_increment;
 	    	assert(current_size >= 0);
 	    	std::vector<AddressMapping> ams;
-             	if(should_rearrange) {		    	
+             	if(should_rearrange) {
 			for(AddressMapping am: addressMappingCache) {
 			    		if(am.isValid()) ams.push_back(am);
 			}
@@ -210,7 +210,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
   				if(thsa) { assert(thsa->ways >0); thsa->ways--; }
   				else assert(0);
             	//rearrange conditionally
-                if(should_rearrange) {        	
+                if(should_rearrange) {
 		    	if(current_size >0) {
 			      	for(AddressMapping am: ams) {
 			    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
@@ -219,16 +219,16 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 			    		   mapping->confident = am.confident;
 			    		   mapping->lookupIndex=am.lookupIndex;
 			    		   addressMappingCache.weightedAccessEntry(mapping,1,false); //For RRIP, touch
-			    	}    	
+			    	}
 		    	}
             	}
-            	
+
             	for(AddressMapping& am: addressMappingCache) {
 		    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways)  am.invalidate();
 		}
-            	
-            	
-            	
+
+
+
 
     		cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()+1);
     	}
@@ -236,7 +236,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     	global_timestamp=0;
     	bloom_reset(&bl);
     }
-    
+
     if(!temporal && !store_unreliable) return;
 
     if (correlated_addr_found && (current_size>0)) {
@@ -256,7 +256,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
         if(!wasConfident) {
         	mapping->address = target;
         }
-        
+
         int index=0;
         uint64_t time = -1;
         if(lookupAssoc>0){
@@ -272,7 +272,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 				index=x;
 			}
 		}
-		
+
 		lookupTable[index]=target>>lookupOffset;
 		lookupTick[index]=curTick();
 		mapping->lookupIndex=index;
@@ -295,7 +295,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 	   	 	if(lookup == pf_target->address)prefetchStats.lookupCorrect++;
 	    		else prefetchStats.lookupWrong++;
     		}
-    		
+
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", lookup << lBlkSize, addr << lBlkSize, pc);
     		addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
     		delay += cacheDelay;
@@ -318,11 +318,11 @@ Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, boo
 {
 	    TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
 	  				if(!thsa)  assert(0);
-    	cachetags->clearSetWay(thsa->extractSet(paddr)/maxWays, thsa->extractSet(paddr)%maxWays); 
+    	cachetags->clearSetWay(thsa->extractSet(paddr)/maxWays, thsa->extractSet(paddr)%maxWays);
     if(should_rearrange) {
 
 	    int index= paddr % (way_idx.size()); //Not quite the same indexing strategy, but close enough.
-	    
+
 	    if(way_idx[index] != thsa->ways) {
 	    	if(way_idx[index] !=0) prefetchStats.metadataAccesses+= thsa->ways + way_idx[index];
 	    	way_idx[index]=thsa->ways;
@@ -356,7 +356,7 @@ TriageHashedSetAssociative::extractSet(const Addr addr) const
 {
 	//Input is already blockIndex so no need to remove block again.
     Addr offset = addr;
-    
+
    /* const Addr hash1 = offset & ((1<<16)-1);
     const Addr hash2 = (offset >> 16) & ((1<<16)-1);
         const Addr hash3 = (offset >> 32) & ((1<<16)-1);
@@ -376,9 +376,9 @@ TriageHashedSetAssociative::extractTag(const Addr addr) const
     //or the weird index above. The tag can't be the remaining bits if we use the literal representation!
 
 
-    Addr offset = addr / (numSets/max_ways); 
+    Addr offset = addr / (numSets/max_ways);
     int result = 0;
-    
+
     const int shiftwidth=10;
 
     for(int x=0; x<64; x+=shiftwidth) {
