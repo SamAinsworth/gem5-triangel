@@ -32,6 +32,7 @@ SimObject('Prefetcher.py', sim_objects=[
     'BasePrefetcher', 'MultiPrefetcher', 'QueuedPrefetcher',
     'StridePrefetcherHashedSetAssociative', 'StridePrefetcher',
     'TriangelHashedSetAssociative', 'TriangelPrefetcher',
+    'SimpleTriangelHashedSetAssociative', 'SimpleTriangelPrefetcher',
     'TriageHashedSetAssociative', 'TriagePrefetcher',
     'TaggedPrefetcher', 'IndirectMemoryPrefetcher', 'SignaturePathPrefetcher',
     'SignaturePathPrefetcherV2', 'AccessMapPatternMatching', 'AMPMPrefetcher',
@@ -55,6 +56,7 @@ Source('slim_ampm.cc')
 Source('spatio_temporal_memory_streaming.cc')
 Source('stride.cc')
 Source('tagged.cc')
+Source('simpletriangel.cc')
 Source('triangel.cc')
 Source('triage.cc')
 Source('MurmurHash2.c')

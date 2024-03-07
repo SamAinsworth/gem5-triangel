@@ -249,10 +249,9 @@ def config_cache(options, system):
             dcache = dcache_class()
             if options.triangel:
                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
+                    prefetcher=SimpleTriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        owntags=dcache.tags,
-                        timed_scs=True,
+                        sctags=dcache.tags,
                         cache_delay=25,
                         degree=4,
                         address_map_max_ways=8,
@@ -260,146 +259,67 @@ def config_cache(options, system):
                         address_map_actual_cache_assoc=12,
                         address_map_rounded_entries="262144",
                         address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
-                        #useSampleConfidence=True,
                     )
                 )
             elif options.triangelbloom:
-                l2_cache = l2_cache_class(
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        owntags=dcache.tags,
-                        timed_scs=True,                        
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         use_bloom=True
                     )
-                )                
+                )      
+                )                 
             elif options.triangelnoscs:
-                l2_cache = l2_cache_class(
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
-                        use_scs=False,
-                        
+                        sctags=dcache.tags,
+                        use_scs=False
                     )
+                )      
                 )    
-            elif options.triangelnopattern:
-                l2_cache = l2_cache_class(
+            elif options.triangelnoscs:
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         use_pattern=False
                     )
-                )     
+                )      
+                )    
             elif options.triangelnopattern2:
-                l2_cache = l2_cache_class(
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         use_pattern2=False
                     )
-                )                
+                )      
+                )            
             elif options.triangelnoreuse:
-                l2_cache = l2_cache_class(
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         use_reuse=False
                     )
-                )         
+                )      
+                )   
             elif options.triangelperfbias:
-                l2_cache = l2_cache_class(
+                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         perfbias=True
                     )
-                )                                                                  
+                )      
+                )                                                               
             elif options.triangelhawk:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
+                        sctags=dcache.tags,
                         use_hawkeye=True,
                         address_map_cache_replacement_policy=WeightedLRURP()
                     )
@@ -408,74 +328,23 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
+                        sctags=dcache.tags,                        
                         degree=1,
-                        should_lookahead=False,
-                        address_map_cache_replacement_policy=RRIPRP(),
                     )
                 )
             elif options.triangeloff1:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
+                        sctags=dcache.tags,
                         should_lookahead=False,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
-                    )
-                )
-            elif options.triangelrrip:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
                     )
                 )
             elif options.triangelnorearr:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        sample_assoc=2,
-                        address_map_cache_replacement_policy=RRIPRP(),
+                        sctags=dcache.tags,
                         should_rearrange=False,
                     )
                 )
@@ -483,18 +352,13 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
+                        sctags=dcache.tags,
                         address_map_max_ways=2,
-                        address_map_actual_entries="49152",
-                        address_map_actual_cache_assoc=12,
+                        address_map_actual_entries="65536",
+                        address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="256",
-                        test_entries="64",
-                        sample_entries="512",
-                        lookup_assoc=0,
-                        sample_assoc=2,
+                        lookup_assoc=16,
                         use_hawkeye=True,
                         address_map_cache_replacement_policy=WeightedLRURP(),
                     )
@@ -503,93 +367,41 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=2,
-                        address_map_actual_entries="49152",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="65536",
-                        address_map_rounded_cache_assoc=16,
-                        test_entries="64",
-                        sample_entries="512",
-                        lookup_assoc=0,
-                        sample_assoc=2,
-                        use_hawkeye=False,
-                        address_map_cache_replacement_policy=LRURP(),
-                    )
-                )
-            elif options.triangel256lut:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
+                        sctags=dcache.tags,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
-                        test_entries="64",
-                        sample_entries="512",
                         lookup_assoc=16,
-                        sample_assoc=2,
-                        use_hawkeye=False,
+                        address_map_cache_replacement_policy=LRURP(),
                     )
                 )
             elif options.triangel256lutrrip:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
+                        sctags=dcache.tags,                        
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
-                        test_entries="64",
+                        secondchance_entries="64",
                         sample_entries="512",
                         lookup_assoc=16,
-                        sample_assoc=2,
-                        use_hawkeye=False,
                         address_map_cache_replacement_policy=RRIPRP(),
-                    )
-                )
-            elif options.triangel256luthawk:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=2,
-                        address_map_actual_entries="65536",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="65536",
-                        address_map_rounded_cache_assoc=16,
-                        test_entries="64",
-                        sample_entries="512",
-                        lookup_assoc=16,
-                        sample_assoc=2,
-                        use_hawkeye=True,
-                        address_map_cache_replacement_policy=WeightedLRURP(),
                     )
                 )
             elif options.triangelsmall:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=2,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="196608",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        prefetched_cache_entries="128",
-                        test_entries="16",
+                        sctags=dcache.tags,
+                        metadata_reuse_entries="128",
+                        secondchance_entries="16",
                         sample_entries="128",
                         training_unit_entries="128",
-                        address_map_cache_replacement_policy=RRIPRP(),
                         smallduel=True
                     )
                 )
@@ -603,34 +415,18 @@ def config_cache(options, system):
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="262144",
                         address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
                     )
                 )
             elif options.triagedeg4:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        degree=4,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
                     )
                 )                
             elif options.triagenorearr:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
                         should_rearrange=False,
                     )
                 )
@@ -638,68 +434,39 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
-                        lookup_assoc=0,
-                        store_unreliable=True,
+                        lookup_assoc=0
                     )
                 )
             elif options.triagefalut:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
                         lookup_assoc=1024,
-                        store_unreliable=True,
                     )
                 )
             elif options.triage12:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
                         address_map_max_ways=8,
                         address_map_actual_entries="196608",
                         address_map_actual_cache_assoc=12,
                         address_map_rounded_entries="262144",
                         address_map_rounded_cache_assoc=16,
                         lookup_assoc=0,
-                        store_unreliable=True,
                     )
                 )
             elif options.triage10boff:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
                         lookup_offset=10,
-                        store_unreliable=True,
                     )
                 )
             elif options.triagenounrel:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
                         store_unreliable=False,
                     )
                 )
@@ -707,12 +474,6 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=8,
-                        address_map_actual_entries="262144",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="262144",
-                        address_map_rounded_cache_assoc=16,
                         address_map_cache_replacement_policy=LRURP(),
                     )
                 )
@@ -720,75 +481,29 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
                     )
                 )
             elif options.triage256rrip:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
                         address_map_cache_replacement_policy=RRIPRP(),
-                    )
-                )
-            elif options.triage256ideal:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriagePrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=2,
-                        address_map_actual_entries="65536",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="65536",
-                        address_map_rounded_cache_assoc=16,
-                        store_unreliable=True,
-                        lookup_assoc=0,
-                    )
-                )
-            elif options.triage256a12:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriagePrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=2,
-                        address_map_actual_entries="49152",
-                        address_map_actual_cache_assoc=12,
-                        address_map_rounded_entries="65536",
-                        address_map_rounded_cache_assoc=16,
-                        lookup_assoc=0,
-                        store_unreliable=True,
-                    )
-                )
-            elif options.triagenounrel256:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriagePrefetcher(
-                        cachetags=system.l3.tags,
-                        cache_delay=25,
-                        address_map_max_ways=2,
-                        address_map_actual_entries="65536",
-                        address_map_actual_cache_assoc=16,
-                        address_map_rounded_entries="65536",
-                        address_map_rounded_cache_assoc=16,
-                        store_unreliable=False,
                     )
                 )
             elif options.triagelru256:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        cache_delay=25,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,

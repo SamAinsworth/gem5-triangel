@@ -202,13 +202,13 @@ class Triage : public Queued
     Hawkeye hawksets[64];
 
     /** Address Mapping entry, holds an address and a confidence counter */
-    struct AddressMapping : public TaggedEntry
+    struct MarkovMapping : public TaggedEntry
     {
     	Addr index; //Just for maintaining HawkEye easily. Not real.
         Addr address;
         int lookupIndex;
         bool confident;
-        AddressMapping() : index(0), address(0), confident(false)
+        MarkovMapping() : index(0), address(0), confident(false)
         {}
 
 
@@ -223,9 +223,9 @@ class Triage : public Queued
     };
 
     /** History mappings table */
-    AssociativeSet<AddressMapping> addressMappingCache;
+    AssociativeSet<MarkovMapping> markovTable;
 
-    AddressMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool temporal, bool clearing);
+    MarkovMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool temporal, bool clearing);
 
   public:
     Triage(const TriagePrefetcherParams &p);

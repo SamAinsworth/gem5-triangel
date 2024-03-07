@@ -79,11 +79,11 @@ Triage::Triage(
                  p.training_unit_replacement_policy),
     lookupAssoc(p.lookup_assoc),
     lookupOffset(p.lookup_offset),
-    addressMappingCache(p.address_map_rounded_cache_assoc,
+    markovTable(p.address_map_rounded_cache_assoc,
                           p.address_map_rounded_entries,
                           p.address_map_cache_indexing_policy,
                           p.address_map_cache_replacement_policy,
-                          AddressMapping())
+                          MarkovMapping())
 {
 	for(int x=0;x<64;x++) {
 		hawksets[x].setMask = p.address_map_rounded_entries/ hawksets[x].maxElems - 1;
@@ -95,7 +95,7 @@ Triage::Triage(
 	}
 
 	assert(p.address_map_rounded_entries / p.address_map_rounded_cache_assoc == p.address_map_actual_entries / p.address_map_actual_cache_assoc);
-	addressMappingCache.setWayAllocationMax(p.address_map_actual_cache_assoc);
+	markovTable.setWayAllocationMax(p.address_map_actual_cache_assoc);
 	assert(cachetags->getWayAllocationMax()> maxWays+1);
 
 	bloom_init2(&bl,p.address_map_actual_entries, 0.01);
@@ -158,28 +158,28 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
             	assert(current_size <= max_size);
             	assert(cachetags->getWayAllocationMax()>1);
             	cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
-            	std::vector<AddressMapping> ams;
+            	std::vector<MarkovMapping> ams;
 
              	if(should_rearrange) {
-		     	for(AddressMapping am: addressMappingCache) {
+		     	for(MarkovMapping am: markovTable) {
 		    		if(am.isValid()) ams.push_back(am);
 		    	}
-		    	for(AddressMapping& am: addressMappingCache) {
+		    	for(MarkovMapping& am: markovTable) {
 		    		am.invalidate(); //for RRIP's sake
 		    	}
             	}
 
-            	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+            	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(markovTable.indexingPolicy);
   		if(thsa) { thsa->ways++; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
   		else assert(0);
             	if(should_rearrange) {
-			for(AddressMapping am: ams) {
-			    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
+			for(MarkovMapping am: ams) {
+			    		   MarkovMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
 			    		   mapping->address = am.address;
 			    		   mapping->index=am.index;
 			    		   mapping->confident = am.confident;
 			    		   mapping->lookupIndex=am.lookupIndex;
-			    		   addressMappingCache.weightedAccessEntry(mapping,1,false); //For RRIP, touch
+			    		   markovTable.weightedAccessEntry(mapping,1,false); //For RRIP, touch
 			}
 		}
 
@@ -197,33 +197,33 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     		//Also, increase LLC cache associativity by 1.
     		current_size -= size_increment;
 	    	assert(current_size >= 0);
-	    	std::vector<AddressMapping> ams;
+	    	std::vector<MarkovMapping> ams;
              	if(should_rearrange) {
-			for(AddressMapping am: addressMappingCache) {
+			for(MarkovMapping am: markovTable) {
 			    		if(am.isValid()) ams.push_back(am);
 			}
-			for(AddressMapping& am: addressMappingCache) {
+			for(MarkovMapping& am: markovTable) {
 		    		am.invalidate(); //for RRIP's sake
 		    	}
             	}
-	    	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+	    	TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(markovTable.indexingPolicy);
   				if(thsa) { assert(thsa->ways >0); thsa->ways--; }
   				else assert(0);
             	//rearrange conditionally
                 if(should_rearrange) {
 		    	if(current_size >0) {
-			      	for(AddressMapping am: ams) {
-			    		   AddressMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
+			      	for(MarkovMapping am: ams) {
+			    		   MarkovMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
 			    		   mapping->address = am.address;
 			    		   mapping->index=am.index;
 			    		   mapping->confident = am.confident;
 			    		   mapping->lookupIndex=am.lookupIndex;
-			    		   addressMappingCache.weightedAccessEntry(mapping,1,false); //For RRIP, touch
+			    		   markovTable.weightedAccessEntry(mapping,1,false); //For RRIP, touch
 			    	}
 		    	}
             	}
 
-            	for(AddressMapping& am: addressMappingCache) {
+            	for(MarkovMapping& am: markovTable) {
 		    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways)  am.invalidate();
 		}
 
@@ -242,7 +242,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     if (correlated_addr_found && (current_size>0)) {
         // If a correlation was found, update the History table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	AddressMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal, false);
+	MarkovMapping *mapping = getHistoryEntry(index, is_secure,false,false,temporal, false);
 	if(mapping == nullptr) {
         	mapping = getHistoryEntry(index, is_secure,true,false,temporal, false);
         	mapping->address = target;
@@ -280,7 +280,7 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     }
 
     if(target != 0 && (current_size>0)) {
-  	 AddressMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal, false);
+  	 MarkovMapping *pf_target = getHistoryEntry(target, is_secure,false,true,temporal, false);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
      	 unsigned max = degree;
@@ -313,10 +313,10 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 
 }
 
-Triage::AddressMapping*
+Triage::MarkovMapping*
 Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool temporal, bool clearing)
 {
-	    TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(addressMappingCache.indexingPolicy);
+	    TriageHashedSetAssociative* thsa = dynamic_cast<TriageHashedSetAssociative*>(markovTable.indexingPolicy);
 	  				if(!thsa)  assert(0);
     	cachetags->clearSetWay(thsa->extractSet(paddr)/maxWays, thsa->extractSet(paddr)%maxWays);
     if(should_rearrange) {
@@ -329,20 +329,20 @@ Triage::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, boo
 	    }
     }
 
-    AddressMapping *ps_entry =
-        addressMappingCache.findEntry(paddr, is_secure);
+    MarkovMapping *ps_entry =
+        markovTable.findEntry(paddr, is_secure);
     if(readonly || !add) prefetchStats.metadataAccesses++;
     if (ps_entry != nullptr) {
         // A PS-AMC line already exists
-        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0,false); //For RRIP, touch
+        markovTable.weightedAccessEntry(ps_entry,temporal?1:0,false); //For RRIP, touch
     } else {
         if(!add) return nullptr;
-        ps_entry = addressMappingCache.findVictim(paddr);
+        ps_entry = markovTable.findVictim(paddr);
         assert(ps_entry != nullptr);
         if(!clearing) for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
 	assert(!ps_entry->isValid());
-        addressMappingCache.insertEntry(paddr, is_secure, ps_entry);
-        addressMappingCache.weightedAccessEntry(ps_entry,temporal?1:0, true); //For RRIP, don't touch
+        markovTable.insertEntry(paddr, is_secure, ps_entry);
+        markovTable.weightedAccessEntry(ps_entry,temporal?1:0, true); //For RRIP, don't touch
     }
 
     return ps_entry;

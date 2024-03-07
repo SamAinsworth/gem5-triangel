@@ -43,11 +43,11 @@
  * @file
  * Stride Prefetcher template instantiations.
  */
-#include "mem/cache/prefetch/triangel.hh"
+#include "mem/cache/prefetch/simpletriangel.hh"
 
 #include "debug/HWPrefetch.hh"
 #include "mem/cache/prefetch/associative_set_impl.hh"
-#include "params/TriangelPrefetcher.hh"
+#include "params/SimpleTriangelPrefetcher.hh"
 #include <cmath>
 
 
@@ -58,16 +58,15 @@ GEM5_DEPRECATED_NAMESPACE(Prefetcher, prefetch);
 namespace prefetch
 {
 
-int Triangel::target_size=0;
-int Triangel::current_size=0;
-int64_t Triangel::global_timestamp=0;
-AssociativeSet<Triangel::MarkovMapping>* Triangel::markovTablePtr=NULL;
-std::vector<uint32_t> Triangel::setPrefetch(17,0);
-Triangel::SizeDuel* Triangel::sizeDuelPtr=nullptr;
-bloom* Triangel::blptr = nullptr;
+int SimpleTriangel::target_size=0;
+int SimpleTriangel::current_size=0;
+int64_t SimpleTriangel::global_timestamp=0;
+AssociativeSet<SimpleTriangel::MarkovMapping>* SimpleTriangel::markovTablePtr=NULL;
+std::vector<uint32_t> SimpleTriangel::setPrefetch(17,0);
+SimpleTriangel::SizeDuel* SimpleTriangel::sizeDuelPtr=nullptr;
 
-Triangel::Triangel(
-    const TriangelPrefetcherParams &p)
+SimpleTriangel::SimpleTriangel(
+    const SimpleTriangelPrefetcherParams &p)
   : Queued(p),
     degree(p.degree),
     cachetags(p.cachetags),
@@ -75,32 +74,14 @@ Triangel::Triangel(
     should_lookahead(p.should_lookahead),
     should_rearrange(p.should_rearrange),
     use_scs(p.use_scs),
-    use_bloom(p.use_bloom),
-    use_reuse(p.use_reuse),
-    use_pattern(p.use_pattern),
-    use_pattern2(p.use_pattern2),
-    use_mrb(p.use_mrb),
-    timed_scs(p.timed_scs),
-    useSampleConfidence(p.useSampleConfidence),
-    perfbias(p.perfbias),
-    smallduel(p.smallduel),
     sctags(p.sctags),
     max_size(p.address_map_actual_entries),
     size_increment(p.address_map_actual_entries/p.address_map_max_ways),
-    //global_timestamp(0),
-    //current_size(0),
-    //target_size(0),
     maxWays(p.address_map_max_ways),    
-    bl(),
-    bloomset(-1),
     way_idx(p.address_map_actual_entries/(p.address_map_max_ways*p.address_map_actual_cache_assoc),0),
     trainingUnit(p.training_unit_assoc, p.training_unit_entries,
                  p.training_unit_indexing_policy,
-                 p.training_unit_replacement_policy),
-    lookupAssoc(p.lookup_assoc),
-    lookupOffset(p.lookup_offset),        
-    //setPrefetch(cachetags->getWayAllocationMax()+1,0),      
-    useHawkeye(p.use_hawkeye),
+                 p.training_unit_replacement_policy),     
     historySampler(p.sample_assoc,
     		  p.sample_entries,
     		  p.sample_indexing_policy,
@@ -127,22 +108,13 @@ Triangel::Triangel(
 	assert(p.address_map_rounded_entries / p.address_map_rounded_cache_assoc == p.address_map_actual_entries / p.address_map_actual_cache_assoc);
 	markovTable.setWayAllocationMax(p.address_map_actual_cache_assoc);
 	assert(cachetags->getWayAllocationMax()> maxWays);
-	int bloom_size = p.address_map_actual_entries/128 < 1024? 1024: p.address_map_actual_entries/128;
-	assert(bloom_init2(&bl,bloom_size, 0.01)==0);
-	blptr = &bl;
-	for(int x=0;x<64;x++) {
-		hawksets[x].setMask = p.address_map_actual_entries/ hawksets[x].maxElems;
-		hawksets[x].reset();
-	}
+
 		sizeDuelPtr= sizeDuels;	
 	for(int x=0;x<64;x++) {
 		sizeDuelPtr[x].reset(size_increment/p.address_map_actual_cache_assoc - 1 ,p.address_map_actual_cache_assoc,cachetags->getWayAllocationMax());
 	}
 
-	for(int x=0;x<1024;x++) {
-		lookupTable[x]=0;
-    		lookupTick[x]=0;
-	}	
+	
 	current_size = 0;
 	target_size=0;
 
@@ -150,7 +122,7 @@ Triangel::Triangel(
 
 
 bool
-Triangel::randomChance(int reuseConf, int replaceRate) {
+SimpleTriangel::randomChance(int reuseConf, int replaceRate) {
 	replaceRate -=8;
 
 	uint64_t baseChance = 1000000000l * historySampler.numEntries / markovTable.numEntries;
@@ -162,30 +134,29 @@ Triangel::randomChance(int reuseConf, int replaceRate) {
 }
 
 void
-Triangel::calculatePrefetch(const PrefetchInfo &pfi,
+SimpleTriangel::calculatePrefetch(const PrefetchInfo &pfi,
     std::vector<AddrPriority> &addresses)
 {
 
     Addr addr = blockIndex(pfi.getAddr());
     // This prefetcher requires a PC
     if (!pfi.hasPC() || pfi.isWrite()) {
-if(!use_bloom) {
-	    for(int x=0;x<(smallduel? 32 :64);x++) {
+	//To update the set dueller with elements int the L3 that are accessed but nothing to do with the prefetcher.
+	    for(int x=0;x<64;x++) {
 		int res =    	sizeDuelPtr[x].checkAndInsert(addr,false);
 		if(res==0)continue;
-		int cache_hit = res%128;
+		int cache_hit = res%128; //Because we encode cache hits as the first 7 bits of this result here.
 		int cache_set = cache_hit-1;
 		assert(!cache_hit || (cache_set<setPrefetch.size()-1 && cache_set>=0));
 		if(cache_hit) for(int y= setPrefetch.size()-2-cache_set; y>=0; y--) setPrefetch[y]++; 
 		// cache partition hit at this size or bigger. So hit in way 14 = y=17-2-14=1 and 0: would hit with 0 ways reserved or 1, not 2.
 
 	    }
-}
         return;
     }
 
     bool is_secure = pfi.isSecure();
-    Addr pc = pfi.getPC()>>2; //Shifted by 2 to help Arm indexing
+    Addr pc = pfi.getPC()>>2; //Shifted by 2 to help Arm indexing. Bit fake; really should xor in these bits with upper bits.
 
 
     // Looks up the last address at this PC
@@ -202,22 +173,21 @@ if(!use_bloom) {
     //const int globalThreshold = 9;
     
     bool should_pf=false;
-    bool should_hawk=false;
     bool should_sample = false;
-    if (entry != nullptr) {
+    if (entry != nullptr) { //This accesses the training table at this PC.
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
         index = entry->lastAddress;
 
         if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
-	if(entry->highHistoryConfidence >= superHistory || !use_pattern2) entry->currently_twodist_pf=true;
-	if(entry->patternConfidence < upperHistory && use_pattern2) entry->currently_twodist_pf=false; 
+	if(entry->highHistoryConfidence >= superHistory) entry->currently_twodist_pf=true;
+	if(entry->patternConfidence < upperHistory) entry->currently_twodist_pf=false; 
         //if very sure, index should be lastLastAddress. TODO: We could also try to learn timeliness here, by tracking PCs at the MSHRs.
         if(entry->currently_twodist_pf && should_lookahead) index = entry->lastLastAddress;
         target = addr;
-        should_pf = (entry->reuseConfidence > upperReuse || !use_reuse) && (entry->patternConfidence > upperHistory || !use_pattern); //8 is the reset point.
+        should_pf = (entry->reuseConfidence > upperReuse) && (entry->patternConfidence > upperHistory); //8 is the reset point.
 
-        if(entry->reuseConfidence > upperReuse|| !use_reuse) global_timestamp++;
+        if(entry->reuseConfidence > upperReuse) global_timestamp++;
 
     }
 
@@ -229,26 +199,24 @@ if(!use_bloom) {
         assert(entry != nullptr);
         assert(!entry->isValid());
         trainingUnit.insertEntry(pc, is_secure, entry);
-        //if(globalHistoryConfidence>upperHistory) {while(entry->patternConfidence <= upperHistory) entry->patternConfidence++;}
-        //if(globalReuseConfidence>upperReuse) {while(entry->reuseConfidence <= upperReuse) entry->reuseConfidence++;}
     }
 
 
     if(correlated_addr_found) {
-    	//Check test unit for a recent history...
+    	//Check second-chance sampler for a recent history. If so, update pattern confidence accordingly.
     	SecondChanceEntry* tentry = secondChanceUnit.findEntry(addr, is_secure);
-    	if(tentry!= nullptr && !tentry->used && (!timed_scs || (tentry->pc==pc && tentry->local_timestamp > entry->local_timestamp - 32))) {
+    	if(tentry!= nullptr && !tentry->used && ((tentry->pc==pc && tentry->local_timestamp > entry->local_timestamp - 32))) {
     		tentry->used=true;
     		TrainingUnitEntry *pentry = trainingUnit.findEntry(tentry->pc, is_secure);
     		 if(pentry != nullptr) {  
   			pentry->patternConfidence++;
-    			if(!perfbias) {pentry->patternConfidence++;}// unbias
+    			pentry->patternConfidence++;// unbias
     			pentry->patternConfidence++;
-    			for(int x=0;x<(perfbias? 3 : 6);x++)pentry->highHistoryConfidence++;
+    			for(int x=0;x<6;x++)pentry->highHistoryConfidence++;
 		}
     	}
     	
-    	//Check sample table for entry.
+    	//Check history sampler for entry.
     	SampleEntry *sentry = historySampler.findEntry(addr, is_secure);
     	if(sentry != nullptr && sentry->pc == pc) {
     		sentry->reused = true;
@@ -259,20 +227,19 @@ if(!use_bloom) {
 
      	    	DPRINTF(HWPrefetch, "Found reuse for addr %x, PC %x, distance %ld (train %ld vs sample %ld) confidence %d\n",addr, pc, distance, entry->local_timestamp, sentry->local_timestamp, entry->reuseConfidence+0);
      	    	
-		bool willBeConfident = entry->lastAddress == sentry->last;
     		
-    		//TODO: What benefit do we get from checking both? Do we need to check last three?
+    		//TODO: What benefit do we get from checking both?
     		
     		if(entry->lastAddress == sentry->last || entry->lastLastAddress == sentry->last || (use_scs && sctags->findBlock(sentry->last<<lBlkSize,is_secure) && !sctags->findBlock(sentry->last<<lBlkSize,is_secure)->wasPrefetched())) {
     			entry->patternConfidence++;
     			entry->highHistoryConfidence++;
-    			//if(entry->replaceRate < 8) entry->replaceRate.reset();
     		}
     		
     		else {
+    			//We haven't spotted the (x,y) pattern we expect, on seeing y. So put x in the SCS and decrement confidence.
     			entry->patternConfidence--;
-    			if(!perfbias) entry->patternConfidence--;//bias
-    			for(int x=0;x<(perfbias? 2 : 5);x++)entry->highHistoryConfidence--;
+    			entry->patternConfidence--;//bias
+    			for(int x=0;x<5;x++)entry->highHistoryConfidence--;
 			if(use_scs) {
 				SecondChanceEntry* tentry = secondChanceUnit.findVictim(addr);
 	    			secondChanceUnit.insertEntry(sentry->last, is_secure, tentry);
@@ -284,11 +251,10 @@ if(!use_bloom) {
     		
         	if(entry->lastAddress == sentry->last) DPRINTF(HWPrefetch, "Match for previous address %x confidence %d\n",entry->lastAddress, entry->patternConfidence+0);
     		if(entry->lastLastAddress == sentry->last) DPRINTF(HWPrefetch, "Match for previous previous address %x confidence %d\n",entry->lastLastAddress, entry->patternConfidence+0);
-    		     	    	if(!useSampleConfidence || !sentry->confident) sentry->last=entry->lastAddress;
-    		     	    	sentry->confident = willBeConfident;
+    		     	    	sentry->last=entry->lastAddress;
     	}
     	else if(should_sample || randomChance(entry->reuseConfidence,entry->replaceRate)) {
-    		//Fill sample table
+    		//Fill sample table, as we're taking a sample at this PC. Should_sample also set by randomChance earlier, on first insert of PC intro training table.
     		sentry = historySampler.findVictim(addr);
     		assert(sentry != nullptr);
     		if(sentry->pc !=0) {
@@ -298,8 +264,9 @@ if(!use_bloom) {
     			    	    DPRINTF(HWPrefetch, "Replacing PC %x with PC %x, old distance %d\n",sentry->pc, pc, distance);
     			    	    if(distance > max_size) {
     			    	        //TODO: Change max size to be relative, based on current tracking set?
-    			            	trainingUnit.accessEntry(pentry);
+    			            	trainingUnit.accessEntry(pentry); //TODO: should we access here, or let replacement state die out by not updating it?
     			            	if(!sentry->reused) { 
+    			            	    	//Reuse conf decremented, as very old.
     			            		pentry->reuseConfidence--;
     			            	}
     			            	entry->replaceRate++; //only replacing oldies -- can afford to be more aggressive.
@@ -315,21 +282,20 @@ if(!use_bloom) {
     		sentry->reused = false;
     		sentry->local_timestamp = entry->local_timestamp+1;
     		sentry->last = entry->lastAddress;
-    		sentry->confident=false;
     	}
     }
     
-    if(!use_bloom) {
 	    
-	    for(int x=0;x<(smallduel? 32 :64);x++) {
-		int res =    	sizeDuelPtr[x].checkAndInsert(addr,should_pf); //TODO: combine with hawk?
+	    for(int x=0;x<64;x++) {
+	    	//Here we update the size duellers, to work out for each cache set whether it is better to be markov table or L3 cache.
+		int res =    	sizeDuelPtr[x].checkAndInsert(addr,should_pf);
 		if(res==0)continue;
-		const int ratioNumer=(perfbias?4:2);
+		const int ratioNumer=2;
 		const int ratioDenom=4;//should_pf && entry->highHistoryConfidence >=upperHistory? 4 : 8;
-		int cache_hit = res%128;
-		int pref_hit = res/128;
-		int cache_set = cache_hit-1;
-		int pref_set = pref_hit-1;
+		int cache_hit = res%128; //This is just bit encoding of cache hits.
+		int pref_hit = res/128; //This is just bit encoding of prefetch hits.
+		int cache_set = cache_hit-1; //Encodes which nth most used replacement-state we hit at, if any.
+		int pref_set = pref_hit-1; //Encodes which nth most used replacement-state we hit at, if any.
 		assert(!cache_hit || (cache_set<setPrefetch.size()-1 && cache_set>=0));
 		assert(!pref_hit || (pref_set<setPrefetch.size()-1 && pref_set>=0));
 		if(cache_hit) for(int y= setPrefetch.size()-2-cache_set; y>=0; y--) setPrefetch[y]++; 
@@ -337,12 +303,11 @@ if(!use_bloom) {
 		if(pref_hit)for(int y=pref_set+1;y<setPrefetch.size();y++) setPrefetch[y]+=(ratioNumer*sizeDuelPtr[x].temporalModMax)/ratioDenom; 
 		// ^ pf hit at this size or bigger. one-indexed (since 0 is an alloc on 0 ways). So hit in way 0 = y=1--16 ways reserved, not 0.
 		
-		//if(cache_hit) printf("Cache hit\n");
-		//else printf("Prefetch hit\n");
 	    }
 	    
 
 	    if(global_timestamp > 500000) {
+	    //Here we choose the size of the Markov table based on the optimum for the last epoch
 	    int counterSizeSeen = 0;
 
 	    for(int x=0;x<setPrefetch.size() && x*size_increment <= max_size;x++) {
@@ -353,22 +318,16 @@ if(!use_bloom) {
 	    }
 
 	    int currentscore = setPrefetch[current_size/size_increment];
-	    currentscore = currentscore + (currentscore>>4);
+	    currentscore = currentscore + (currentscore>>4); //Slight bias against changing for minimal benefit.
 	    int targetscore = setPrefetch[target_size/size_increment];
 
 	    if(target_size != current_size && targetscore>currentscore) {
 	    	current_size = target_size;
 		printf("size: %d, tick %ld \n",current_size,curTick());
-		for(int x=0;x<setPrefetch.size(); x++) {
-			printf("%d: %d\n", x, setPrefetch[x]);
-		}
+
 		assert(current_size >= 0);
 		
-	
-		for(int x=0;x<64;x++) {
-			hawksets[x].setMask = current_size / hawksets[x].maxElems;
-			hawksets[x].reset();
-		}
+
 		std::vector<MarkovMapping> ams;
 			     	if(should_rearrange) {		    	
 					for(MarkovMapping am: *markovTablePtr) {
@@ -378,7 +337,7 @@ if(!use_bloom) {
 				    		am.invalidate(); //for RRIP's sake
 				    	}
 			    	}
-			    	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
+			    	SimpleTriangelHashedSetAssociative* thsa = dynamic_cast<SimpleTriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
 		  				if(thsa) { thsa->ways = current_size/size_increment; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
 		  				else assert(0);
 			    	//rearrange conditionally
@@ -389,7 +348,6 @@ if(!use_bloom) {
 					    		   mapping->address = am.address;
 					    		   mapping->index=am.index;
 					    		   mapping->confident = am.confident;
-					    		   mapping->lookupIndex=am.lookupIndex;
 					    		   markovTablePtr->weightedAccessEntry(mapping,1,false); //For RRIP, touch
 					    	}    	
 				    	}
@@ -400,133 +358,21 @@ if(!use_bloom) {
 				}
 			    	cachetags->setWayAllocationMax(setPrefetch.size()-1-thsa->ways);  	
 	    } 
-			printf("End of epoch:\n");
-		for(int x=0;x<setPrefetch.size(); x++) {
 
-			printf("%d: %d\n", x, setPrefetch[x]);
-		}
 	    	global_timestamp=0;
 		for(int x=0;x<setPrefetch.size();x++) {
 		    	setPrefetch[x]=0;
 		}
-	    	//Reset after 2 million prefetch accesses -- not quite the same as after 30 million insts but close enough
+
 	     }
-	     
-     }
-
-
-    if(useHawkeye && correlated_addr_found && should_pf) {
-        	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
-        	should_hawk = entry->hawkConfidence>7;
-    }
-    
-    if(use_bloom) {
-	    if(correlated_addr_found && should_pf) {
-	    	if(bloomset==-1) bloomset = index&127;
-	    	if((index&127)==bloomset) {
-			int add = bloom_add(blptr, &index, sizeof(Addr));
-			if(!add) { target_size+=192;
-			
-			printf("Bloom: pc %ld conf %d %d %d rate %d\n", pc, entry->reuseConfidence+0,entry->patternConfidence+0,entry->highHistoryConfidence+0,entry->replaceRate+0);
-			}
-		}
-
-	    }
-	    
-	    while(target_size > current_size
-		    		     && target_size > size_increment / 8 && current_size < max_size) {
-		    		        //check for size_increment to leave empty if unlikely to be useful.
-		    			current_size += size_increment;
-		    			printf("size: %d, tick %ld \n",current_size,curTick());
-		    			assert(current_size <= max_size);
-		    			assert(cachetags->getWayAllocationMax()>1);
-		    			cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()-1);
-
-		    	std::vector<MarkovMapping> ams;
-		        if(should_rearrange) {        	
-			     	for(MarkovMapping am: *markovTablePtr) {
-			    		if(am.isValid()) ams.push_back(am);
-			    	}
-				for(MarkovMapping& am: *markovTablePtr) {
-			    		am.invalidate(); //for RRIP's sake
-			    	}
-		    	}
-		    	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
-	  		if(thsa) { thsa->ways++; thsa->max_ways = maxWays; assert(thsa->ways <= thsa->max_ways);}
-	  		else assert(0);
-		    	//TODO: rearrange conditionally
-		        if(should_rearrange) {        	            	
-				for(MarkovMapping am: ams) {
-				    		   MarkovMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false, true, true);
-				    		   mapping->address = am.address;
-				    		   mapping->index=am.index;
-				    		   mapping->confident = am.confident;
-				    		   mapping->lookupIndex=am.lookupIndex;
-				    		   markovTablePtr->weightedAccessEntry(mapping,1,false); //For RRIP, touch
-				} 
-			}  
-		    			//increase associativity of the set structure by 1!
-		    			//Also, decrease LLC cache associativity by 1.
-	    }
-
-		if(global_timestamp > 2000000) {
-	    	//Reset after 2 million prefetch accesses -- not quite the same as after 30 million insts but close enough
-
-	    	while((target_size <= current_size - size_increment  || target_size < size_increment / 8)  && current_size >=size_increment) {
-	    		//reduce the assoc by 1.
-	    		//Also, increase LLC cache associativity by 1.
-	    		current_size -= size_increment;
-	    		printf("size: %d, tick %ld \n",current_size,curTick());
-		    	assert(current_size >= 0);
-		    	std::vector<MarkovMapping> ams;
-		     	if(should_rearrange) {		    	
-				for(MarkovMapping am: *markovTablePtr) {
-				    		if(am.isValid()) ams.push_back(am);
-				}
-				for(MarkovMapping& am: *markovTablePtr) {
-			    		am.invalidate(); //for RRIP's sake
-			    	}
-		    	}
-		    	TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
-	  				if(thsa) { assert(thsa->ways >0); thsa->ways--; }
-	  				else assert(0);
-		    	//rearrange conditionally
-		        if(should_rearrange) {        	
-			    	if(current_size >0) {
-				      	for(MarkovMapping am: ams) {
-				    		   MarkovMapping *mapping = getHistoryEntry(am.index, am.isSecure(),true,false,true,true);
-				    		   mapping->address = am.address;
-				    		   mapping->index=am.index;
-				    		   mapping->confident = am.confident;
-				    		   mapping->lookupIndex=am.lookupIndex;
-				    		   markovTablePtr->weightedAccessEntry(mapping,1,false); //For RRIP, touch
-				    	}    	
-			    	}
-		    	}
-		    	
-		    	for(MarkovMapping& am: *markovTablePtr) {
-			    if(thsa->ways==0 || (thsa->extractSet(am.index) % maxWays)>=thsa->ways)  am.invalidate();
-			}
-		    	
-		    	
-		    	
-
-	    		cachetags->setWayAllocationMax(cachetags->getWayAllocationMax()+1);
-	    	}
-	    	target_size = 0;
-	    	global_timestamp=0;
-	    	bloom_reset(blptr);
-	    	bloomset=-1;
-	    }
-    }
-    
+	         
     
     if (correlated_addr_found && should_pf && (current_size>0)) {
-        // If a correlation was found, update the History table accordingly
+        // If a correlation was found, update the Markov table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
-	MarkovMapping *mapping = getHistoryEntry(index, is_secure,false,false,false, should_hawk);
+	MarkovMapping *mapping = getHistoryEntry(index, is_secure,false,false,false, false);
 	if(mapping == nullptr) {
-        	mapping = getHistoryEntry(index, is_secure,true,false,false, should_hawk);
+        	mapping = getHistoryEntry(index, is_secure,true,false,false, false);
         	mapping->address = target;
         	mapping->index=index; //for HawkEye
         	mapping->confident = false;
@@ -534,11 +380,11 @@ if(!use_bloom) {
         assert(mapping != nullptr);
         bool confident = mapping->address == target; 
         bool wasConfident = mapping->confident;
-        mapping->confident = confident;
+        mapping->confident = confident; //Confidence is just used for replacement. I haven't tested how important it is for performance to use it; this is inherited from Triage.
         if(!wasConfident) {
         	mapping->address = target;
         }
-        if(wasConfident && confident && use_mrb) {
+        if(wasConfident && confident) {
         	MarkovMapping *cached_entry =
         		metadataReuseBuffer.findEntry(index, is_secure);
         	if(cached_entry != nullptr) {
@@ -547,63 +393,35 @@ if(!use_bloom) {
         	}
         }
         
-        int index=0;
-        uint64_t time = -1;
-        if(lookupAssoc>0){
-		int lookupMask = (1024/lookupAssoc)-1;
-		int set = (target>>lookupOffset)&lookupMask;
-		for(int x=lookupAssoc*set;x<lookupAssoc*(set+1);x++) {
-			if(target>>lookupOffset == lookupTable[x]) {
-				index=x;
-				break;
-			}
-			if(time > lookupTick[x]) {
-				time = lookupTick[x];
-				index=x;
-			}
-		}
-		
-		lookupTable[index]=target>>lookupOffset;
-		lookupTick[index]=curTick();
-		mapping->lookupIndex=index;
-        }
         
     }
 
     if(target != 0 && should_pf && (current_size>0)) {
-  	 MarkovMapping *pf_target = getHistoryEntry(target, is_secure,false,true,false, should_hawk);
+  	 MarkovMapping *pf_target = getHistoryEntry(target, is_secure,false,true,false, false);
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
   	 bool high_degree_pf = pf_target != nullptr
-  	         && (entry->highHistoryConfidence>upperHistory || !use_pattern2)/*&& pf_target->confident*/;
+  	         && (entry->highHistoryConfidence>upperHistory);
    	 unsigned max = high_degree_pf? degree : (should_pf? 1 : 0);
-   	 //if(pf_target == nullptr && should_pf) DPRINTF(HWPrefetch, "Target not found for %x, PC %x\n", target << lBlkSize, pc);
-   	 while (pf_target != nullptr && deg < max  /*&& (pf_target->confident || entry->highHistoryConfidence>upperHistory)*/
-   	 ) { //TODO: do we always pf at distance 1 if not confident?
+
+   	 while (pf_target != nullptr && deg < max) 
+   	 { 
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
     		int extraDelay = cacheDelay;
-    		if(lastAccessFromPFCache && use_mrb) {
+    		if(lastAccessFromPFCache) {
     			Cycles time = curCycle() - pf_target->cycle_issued;
     			if(time >= cacheDelay) extraDelay = 0;
     			else if (time < cacheDelay) extraDelay = time;
     		}
     		
     		Addr lookup = pf_target->address;
-   	        if(lookupAssoc>0){
-	   	 	int index=pf_target->lookupIndex;
-	   	 	int lookupMask = (1<<lookupOffset)-1;
-	   	 	lookup = (lookupTable[index]<<lookupOffset) + ((pf_target->address)&lookupMask);
-	   	 	lookupTick[index]=curTick();
-	   	 	if(lookup == pf_target->address)prefetchStats.lookupCorrect++;
-	    		else prefetchStats.lookupWrong++;
-    		}
+
     		
     		if(extraDelay == cacheDelay) addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
-    		delay += extraDelay;
-    		//if(extraDelay < cacheDelay && high_degree_pf && max<4) max++;
+    		delay += extraDelay; // if cached, less delay. Not always none: might be a partially complete access still to arrive from L3.
     		deg++;
     		
-    		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(lookup, is_secure,false,true,false, should_hawk);
+    		if(deg<max) pf_target = getHistoryEntry(lookup, is_secure,false,true,false, false);
     		else pf_target = nullptr;
 
    	 }
@@ -621,10 +439,11 @@ if(!use_bloom) {
 
 }
 
-Triangel::MarkovMapping*
-Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool clearing, bool hawk)
+SimpleTriangel::MarkovMapping*
+SimpleTriangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool clearing, bool hawk)
 {
-  	    TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
+	//The weird parameters above control whether we replace entries, and how the number of metadata accesses are updated, for instance. They're basically a simulation thing.
+  	    SimpleTriangelHashedSetAssociative* thsa = dynamic_cast<SimpleTriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
 	  				if(!thsa)  assert(0);  
 
     	cachetags->clearSetWay(thsa->extractSet(paddr)/maxWays, thsa->extractSet(paddr)%maxWays); 
@@ -642,7 +461,7 @@ Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, b
 
     if(readonly) { //check the cache first.
         MarkovMapping *pf_entry =
-        	use_mrb ? metadataReuseBuffer.findEntry(paddr, is_secure) : nullptr;
+        	 metadataReuseBuffer.findEntry(paddr, is_secure);
         if (pf_entry != nullptr) {
         	lastAccessFromPFCache = true;
         	return pf_entry;
@@ -655,18 +474,17 @@ Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, b
     if(readonly || !add) prefetchStats.metadataAccesses++;
     if (ps_entry != nullptr) {
         // A PS-AMC line already exists
-        markovTablePtr->weightedAccessEntry(ps_entry,hawk?1:0,false);
+        markovTablePtr->weightedAccessEntry(ps_entry,0,false); //This is only complicated because it behaves differently to update state for LRU vs RRIP vs HawkEye.
     } else {
         if(!add) return nullptr;
         ps_entry = markovTablePtr->findVictim(paddr);
         assert(ps_entry != nullptr);
-        if(useHawkeye && !clearing) for(int x=0;x<64;x++) hawksets[x].decrementOnLRU(ps_entry->index,&trainingUnit);
 	assert(!ps_entry->isValid());
         markovTablePtr->insertEntry(paddr, is_secure, ps_entry);
-        markovTablePtr->weightedAccessEntry(ps_entry,hawk?1:0,true);
+        markovTablePtr->weightedAccessEntry(ps_entry,0,true);
     }
 
-    if(readonly && use_mrb) {
+    if(readonly) {
     	    MarkovMapping *pf_entry = metadataReuseBuffer.findVictim(paddr);
     	    metadataReuseBuffer.insertEntry(paddr, is_secure, pf_entry);
     	    pf_entry->address = ps_entry->address;
@@ -682,15 +500,11 @@ Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, b
 
 
 uint32_t
-TriangelHashedSetAssociative::extractSet(const Addr addr) const
+SimpleTriangelHashedSetAssociative::extractSet(const Addr addr) const
 {
 	//Input is already blockIndex so no need to remove block again.
     Addr offset = addr;
     
-   /* const Addr hash1 = offset & ((1<<16)-1);
-    const Addr hash2 = (offset >> 16) & ((1<<16)-1);
-        const Addr hash3 = (offset >> 32) & ((1<<16)-1);
-    */
         offset = ((offset) * max_ways) + (extractTag(addr) % ways);
         return offset & setMask;   //setMask is numSets-1
 
@@ -698,7 +512,7 @@ TriangelHashedSetAssociative::extractSet(const Addr addr) const
 
 
 Addr
-TriangelHashedSetAssociative::extractTag(const Addr addr) const
+SimpleTriangelHashedSetAssociative::extractTag(const Addr addr) const
 {
     //Input is already blockIndex so no need to remove block again.
 
@@ -706,9 +520,10 @@ TriangelHashedSetAssociative::extractTag(const Addr addr) const
     //or the weird index above. The tag can't be the remaining bits if we use the literal representation!
 
 
-    Addr offset = addr / (numSets/max_ways); 
+    Addr offset = addr / (numSets/max_ways); //Remove the index bits first. Not clear how important, but it seemed helpful experimentally.
     int result = 0;
     
+    //This is a tag# as described in the Triangel paper.
     const int shiftwidth=10;
 
     for(int x=0; x<64; x+=shiftwidth) {

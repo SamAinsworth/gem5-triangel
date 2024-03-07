@@ -20,7 +20,7 @@
 #include "mem/packet.hh"
 #include "base/random.hh"
 
-#include "params/TriangelHashedSetAssociative.hh"
+#include "params/SimpleTriangelHashedSetAssociative.hh"
 
 #include "bloom.h"
 
@@ -29,7 +29,7 @@
 namespace gem5
 {
 
-struct TriangelPrefetcherParams;
+struct SimpleTriangelPrefetcherParams;
 
 GEM5_DEPRECATED_NAMESPACE(Prefetcher, prefetch);
 namespace prefetch
@@ -39,7 +39,7 @@ namespace prefetch
  * Override the default set associative to apply a specific hash function
  * when extracting a set.
  */
-class TriangelHashedSetAssociative : public SetAssociative
+class SimpleTriangelHashedSetAssociative : public SetAssociative
 {
   public:
     uint32_t extractSet(const Addr addr) const override;
@@ -48,17 +48,17 @@ class TriangelHashedSetAssociative : public SetAssociative
   public:
     int ways;
     int max_ways;
-    TriangelHashedSetAssociative(
-        const TriangelHashedSetAssociativeParams &p)
+    SimpleTriangelHashedSetAssociative(
+        const SimpleTriangelHashedSetAssociativeParams &p)
       : SetAssociative(p), ways(0),max_ways(8)
     {
     }
-    ~TriangelHashedSetAssociative() = default;
+    ~SimpleTriangelHashedSetAssociative() = default;
 };
 
 
 
-class Triangel : public Queued
+class SimpleTriangel : public Queued
 {
 
     /** Number of maximum prefetches requests created when predicting */
@@ -75,15 +75,7 @@ class Triangel : public Queued
     const bool should_rearrange;
     
     const bool use_scs;
-    const bool use_bloom;
-    const bool use_reuse;
-    const bool use_pattern;
-    const bool use_pattern2;
-    const bool use_mrb;
-    const bool perfbias;
-    const bool smallduel;
-    const bool timed_scs;
-    const bool useSampleConfidence;
+
     
     BaseTags* sctags;
 
@@ -95,11 +87,6 @@ class Triangel : public Queued
     static int current_size;
     static int target_size;
     const int maxWays;    
-    
-    static bloom* blptr;
-
-    bloom bl;
-    int bloomset=-1;
     
     std::vector<int> way_idx;
    
@@ -139,11 +126,7 @@ class Triangel : public Queued
     /** Map of PCs to Training unit entries */
     AssociativeSet<TrainingUnitEntry> trainingUnit;
     
-    Addr lookupTable[1024];
-    uint64_t lookupTick[1024];
-    const int lookupAssoc;
-    const int lookupOffset;
-    
+
    
   static std::vector<uint32_t> setPrefetch; 
  
@@ -248,99 +231,11 @@ assert(idx>=0);
   static SizeDuel* sizeDuelPtr;
 
 
-  struct Hawkeye
-    {
-      int iteration;
-      uint64_t set;
-      uint64_t setMask; // address_map_rounded_entries/ maxElems - 1
-      Addr logaddrs[64];
-      Addr logpcs[64];
-      int logsize[64];
-      int maxElems = 8;
-      
-      Hawkeye(uint64_t mask, bool history) : iteration(0), set(0), setMask(mask)
-        {
-           reset();
-        }
-        
-      Hawkeye() : iteration(0), set(0)
-        {       }
-      
-      void reset() {
-        iteration=0;
-        for(int x=0;x<64;x++) {
-        	logsize[x]=0;
-        	logaddrs[x]=0;
-        	logpcs[x]=0;
-        }
-        set = random_mt.random<uint64_t>(0,setMask-1);
-      }
-      
-      void decrementOnLRU(Addr addr,AssociativeSet<TrainingUnitEntry>* trainer) {
-      	 if((addr % setMask) != set) return;
-         for(int y=iteration;y!=((iteration+1)&63);y=(y-1)&63) {
-               if(addr==logaddrs[y]) {
-               	    Addr pc = logpcs[y];
-               	    TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
-               	    if(entry!=nullptr) {
-               	    	if(entry->hawkConfidence>=8) {
-               	    		entry->hawkConfidence--;
-               	    		//printf("%s evicted, pc %s, temporality %d\n",addr, pc,entry->temporal);
-               	    	}
-               	    	
-               	    }
-               	    return;
-               }
-         }            
-      }
-      
-      void add(Addr addr,  Addr pc,AssociativeSet<TrainingUnitEntry>* trainer) {
-        if((addr % setMask) != set) return;
-        logaddrs[iteration]=addr;
-        logpcs[iteration]=pc;
-        logsize[iteration]=0;
-
-        
-        TrainingUnitEntry *entry = trainer->findEntry(pc, false); //TODO: is secure
-        if(entry!=nullptr) {
-          for(int y=(iteration-1)&63;y!=iteration;y=(y-1)&63) {
-               
-               if(logsize[y] == maxElems) {
-                 //no match
-                 //printf("%s above max elems, pc %s, temporality %d\n",addr, pc,entry->temporal-1);
-                 entry->hawkConfidence--;
-                 break;
-               }
-               if(addr==logaddrs[y]) {
-                 //found a match
-                 //printf("%s fits, pc %s, temporality %d\n",addr, pc,entry->temporal+1);
-                   entry->hawkConfidence++;
-                   for(int z=y;z!=iteration;z=(z+1)&63){
-                   	logsize[z]++;
-                   }
-                break;
-               }
-            }            
-        }
-        iteration++;
-        iteration = iteration % 64;
-      }
-      
-    };
-
-
-
-    
-    
-    Hawkeye hawksets[64];
-    bool useHawkeye;
-
     /** Address Mapping entry, holds an address and a confidence counter */
     struct MarkovMapping : public TaggedEntry
     {
       	Addr index; //Just for maintaining HawkEye easily. Not real.
         Addr address;
-        int lookupIndex; //Only one of lookupIndex/Address are real.
         bool confident;
         Cycles cycle_issued; // only for prefetched cache and only in simulation
         MarkovMapping() : index(0), address(0), confident(false), cycle_issued(0)
@@ -366,7 +261,6 @@ assert(idx>=0);
     	bool reused;
     	uint64_t local_timestamp;
     	Addr last;
-    	bool confident;
 
     	SampleEntry() : pc(0), reused(false), local_timestamp(0), last(0)
         {}
@@ -382,7 +276,6 @@ assert(idx>=0);
                 reused = false;
                 local_timestamp=0;
                 last = 0;
-                confident=false;
         }
     };
     AssociativeSet<SampleEntry> historySampler;
@@ -408,8 +301,8 @@ assert(idx>=0);
     MarkovMapping* getHistoryEntry(Addr index, bool is_secure, bool replace, bool readonly, bool clearing, bool hawk);
 
   public:
-    Triangel(const TriangelPrefetcherParams &p);
-    ~Triangel() = default;
+    SimpleTriangel(const SimpleTriangelPrefetcherParams &p);
+    ~SimpleTriangel() = default;
 
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;
