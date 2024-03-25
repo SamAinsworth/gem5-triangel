@@ -709,13 +709,10 @@ class TriagePrefetcher(QueuedPrefetcher):
     prefetch_on_pf_hit = True  # TODO: check these!
     cross_pages = True
 
-    sample_history = Param.Bool(False, "Add history into hawkeye calculation")
-    sample_two_history = Param.Bool(
-        False, "Add 2nd history into hawkeye calculation"
-    )
     store_unreliable = Param.Bool(True, "Store history for unreliable PCs")
     cachetags = Param.BaseTags(Parent.tags, "Cache we're storing metadata in")
     should_rearrange = Param.Bool(True, "Should rearrange on index change")
+    lookahead_two = Param.Bool(False, "Add Triangel-style Lookahead-2 (unconditionally)")    
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
 
     degree = Param.Int(1, "Number of prefetches to generate")

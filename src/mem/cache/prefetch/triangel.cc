@@ -80,13 +80,14 @@ Triangel::Triangel(
     use_pattern(p.use_pattern),
     use_pattern2(p.use_pattern2),
     use_mrb(p.use_mrb),
-    timed_scs(p.timed_scs),
-    useSampleConfidence(p.useSampleConfidence),
     perfbias(p.perfbias),
     smallduel(p.smallduel),
+    timed_scs(p.timed_scs),
+    useSampleConfidence(p.useSampleConfidence),    
     sctags(p.sctags),
     max_size(p.address_map_actual_entries),
     size_increment(p.address_map_actual_entries/p.address_map_max_ways),
+    second_chance_timestamp(0),
     //global_timestamp(0),
     //current_size(0),
     //target_size(0),
@@ -94,6 +95,9 @@ Triangel::Triangel(
     bl(),
     bloomset(-1),
     way_idx(p.address_map_actual_entries/(p.address_map_max_ways*p.address_map_actual_cache_assoc),0),
+    globalReuseConfidence(7,64),
+    globalPatternConfidence(7,64),
+    globalHighPatternConfidence(7,64),
     trainingUnit(p.training_unit_assoc, p.training_unit_entries,
                  p.training_unit_indexing_policy,
                  p.training_unit_replacement_policy),
@@ -167,6 +171,8 @@ Triangel::calculatePrefetch(const PrefetchInfo &pfi,
 {
 
     Addr addr = blockIndex(pfi.getAddr());
+    second_chance_timestamp++;
+    
     // This prefetcher requires a PC
     if (!pfi.hasPC() || pfi.isWrite()) {
 if(!use_bloom) {
@@ -194,10 +200,11 @@ if(!use_bloom) {
     Addr index = 0;
     Addr target = 0;
     
-    const int upperHistory=8;
+    const int upperHistory=globalPatternConfidence>64?7:8;
+    const int highUpperHistory=globalHighPatternConfidence>64?7:8;
     const int superHistory=14;
     
-    const int upperReuse=8;
+    const int upperReuse=globalReuseConfidence>64?7:8;
     
     //const int globalThreshold = 9;
     
@@ -210,97 +217,119 @@ if(!use_bloom) {
         index = entry->lastAddress;
 
         if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
-	if(entry->highHistoryConfidence >= superHistory || !use_pattern2) entry->currently_twodist_pf=true;
+	if(entry->highPatternConfidence >= superHistory || !use_pattern2) entry->currently_twodist_pf=true;
 	if(entry->patternConfidence < upperHistory && use_pattern2) entry->currently_twodist_pf=false; 
         //if very sure, index should be lastLastAddress. TODO: We could also try to learn timeliness here, by tracking PCs at the MSHRs.
         if(entry->currently_twodist_pf && should_lookahead) index = entry->lastLastAddress;
         target = addr;
         should_pf = (entry->reuseConfidence > upperReuse || !use_reuse) && (entry->patternConfidence > upperHistory || !use_pattern); //8 is the reset point.
 
-        if(entry->reuseConfidence > upperReuse|| !use_reuse) global_timestamp++;
+        global_timestamp++;
 
     }
 
-    if(entry==nullptr && randomChance(8,8)){ //only start adding samples for frequent entries.
+    if(entry==nullptr && (randomChance(8,8) || ((!use_reuse || globalReuseConfidence > 64) && (!use_pattern2 || globalHighPatternConfidence > 64) && (!use_pattern || globalPatternConfidence > 64)))){ //only start adding samples for frequent entries.
 	//TODO: should this instead just be tagless?
-    	should_sample = true;
+    	if(!((!use_reuse || globalReuseConfidence > 64) && (!use_pattern2 || globalHighPatternConfidence > 64)  && (!use_pattern || globalPatternConfidence > 64)))should_sample = true;
         entry = trainingUnit.findVictim(pc);
         DPRINTF(HWPrefetch, "Replacing Training Entry %x\n",pc);
         assert(entry != nullptr);
         assert(!entry->isValid());
         trainingUnit.insertEntry(pc, is_secure, entry);
-        //if(globalHistoryConfidence>upperHistory) {while(entry->patternConfidence <= upperHistory) entry->patternConfidence++;}
-        //if(globalReuseConfidence>upperReuse) {while(entry->reuseConfidence <= upperReuse) entry->reuseConfidence++;}
+        //printf("local timestamp %ld\n", entry->local_timestamp);
+        if(globalHighPatternConfidence>96) entry->currently_twodist_pf=true;
     }
+
 
 
     if(correlated_addr_found) {
     	//Check test unit for a recent history...
     	SecondChanceEntry* tentry = secondChanceUnit.findEntry(addr, is_secure);
-    	if(tentry!= nullptr && !tentry->used && (!timed_scs || (tentry->pc==pc && tentry->local_timestamp > entry->local_timestamp - 32))) {
+    	if(tentry!= nullptr && !tentry->used) {
     		tentry->used=true;
     		TrainingUnitEntry *pentry = trainingUnit.findEntry(tentry->pc, is_secure);
-    		 if(pentry != nullptr) {  
-  			pentry->patternConfidence++;
-    			if(!perfbias) {pentry->patternConfidence++;}// unbias
-    			pentry->patternConfidence++;
-    			for(int x=0;x<(perfbias? 3 : 6);x++)pentry->highHistoryConfidence++;
+    		 if((!timed_scs || (tentry->global_timestamp + 512 > second_chance_timestamp)) && pentry != nullptr) {  
+  			if(tentry->pc==pc) {
+	  			pentry->patternConfidence++;
+	    			pentry->highPatternConfidence++;
+	    			globalPatternConfidence++;
+	    			globalHighPatternConfidence++;
+    			}
+		} else if(pentry!=nullptr) {
+				    			pentry->patternConfidence--;
+			    			globalPatternConfidence--;
+			    			if(!perfbias) { pentry->patternConfidence--; globalPatternConfidence--;} //bias 
+			    			for(int x=0;x<(perfbias? 2 : 5);x++) {pentry->highPatternConfidence--;  globalHighPatternConfidence--;}
 		}
     	}
     	
     	//Check sample table for entry.
-    	SampleEntry *sentry = historySampler.findEntry(addr, is_secure);
-    	if(sentry != nullptr && sentry->pc == pc) {
-    		sentry->reused = true;
+    	SampleEntry *sentry = historySampler.findEntry(entry->lastAddress, is_secure);
+    	if(sentry != nullptr && sentry->entry == entry) {    		
     		
-    		int64_t distance = entry->local_timestamp - sentry->local_timestamp;
-		if(distance > 0 && distance < max_size) { entry->reuseConfidence++; }else if(!sentry->reused){ entry->reuseConfidence--;}
-
+		int64_t distance = sentry->entry->local_timestamp - sentry->local_timestamp;
+		if(distance > 0 && distance < max_size) { entry->reuseConfidence++;globalReuseConfidence++;}
+		else if(!sentry->reused){ entry->reuseConfidence--;globalReuseConfidence--;}
+    		sentry->reused = true;
 
      	    	DPRINTF(HWPrefetch, "Found reuse for addr %x, PC %x, distance %ld (train %ld vs sample %ld) confidence %d\n",addr, pc, distance, entry->local_timestamp, sentry->local_timestamp, entry->reuseConfidence+0);
      	    	
-		bool willBeConfident = entry->lastAddress == sentry->last;
+		bool willBeConfident = addr == sentry->next;
     		
-    		//TODO: What benefit do we get from checking both? Do we need to check last three?
-    		
-    		if(entry->lastAddress == sentry->last || entry->lastLastAddress == sentry->last || (use_scs && sctags->findBlock(sentry->last<<lBlkSize,is_secure) && !sctags->findBlock(sentry->last<<lBlkSize,is_secure)->wasPrefetched())) {
-    			entry->patternConfidence++;
-    			entry->highHistoryConfidence++;
+    		if(addr == sentry->next ||  (use_scs && sctags->findBlock(sentry->next<<lBlkSize,is_secure) && !sctags->findBlock(sentry->next<<lBlkSize,is_secure)->wasPrefetched())) {
+    			if(addr == sentry->next) {
+    				entry->patternConfidence++;
+    				entry->highPatternConfidence++;
+    				globalPatternConfidence++;
+	    			globalHighPatternConfidence++;
+    			}
     			//if(entry->replaceRate < 8) entry->replaceRate.reset();
     		}
     		
     		else {
-    			entry->patternConfidence--;
-    			if(!perfbias) entry->patternConfidence--;//bias
-    			for(int x=0;x<(perfbias? 2 : 5);x++)entry->highHistoryConfidence--;
+
 			if(use_scs) {
 				SecondChanceEntry* tentry = secondChanceUnit.findVictim(addr);
-	    			secondChanceUnit.insertEntry(sentry->last, is_secure, tentry);
+				if(tentry->pc !=0 && !tentry->used) {
+    			   		TrainingUnitEntry *pentry = trainingUnit.findEntry(tentry->pc, is_secure);	
+    			   		if(pentry != nullptr) {
+			    			pentry->patternConfidence--;
+			    			globalPatternConfidence--;
+			    			if(!perfbias) { pentry->patternConfidence--; globalPatternConfidence--;} //bias 
+			    			for(int x=0;x<(perfbias? 2 : 5);x++) {pentry->highPatternConfidence--;  globalHighPatternConfidence--;  	 }		   		
+    			   		}			
+				}
+	    			secondChanceUnit.insertEntry(sentry->next, is_secure, tentry);
 	    			tentry->pc = pc;
-	    			tentry->local_timestamp = entry->local_timestamp;
+	    			tentry->global_timestamp = second_chance_timestamp;
 	    			tentry->used = false;
+    			} else {
+    				entry->patternConfidence--;
+    				globalPatternConfidence--;
+			    	if(!perfbias) { entry->patternConfidence--; globalPatternConfidence--;} 
+			    	for(int x=0;x<(perfbias? 2 : 5);x++) {entry->highPatternConfidence--;  globalHighPatternConfidence--;  	 }	 			   		
     			}
     		}
     		
-        	if(entry->lastAddress == sentry->last) DPRINTF(HWPrefetch, "Match for previous address %x confidence %d\n",entry->lastAddress, entry->patternConfidence+0);
-    		if(entry->lastLastAddress == sentry->last) DPRINTF(HWPrefetch, "Match for previous previous address %x confidence %d\n",entry->lastLastAddress, entry->patternConfidence+0);
-    		     	    	if(!useSampleConfidence || !sentry->confident) sentry->last=entry->lastAddress;
+        	if(addr == sentry->next) DPRINTF(HWPrefetch, "Match for address %x confidence %d\n",addr, entry->patternConfidence+0);
+    		     	    	if(sentry->entry == entry) if(!useSampleConfidence || !sentry->confident) sentry->next=addr;
     		     	    	sentry->confident = willBeConfident;
     	}
     	else if(should_sample || randomChance(entry->reuseConfidence,entry->replaceRate)) {
     		//Fill sample table
-    		sentry = historySampler.findVictim(addr);
+    		sentry = historySampler.findVictim(entry->lastAddress);
     		assert(sentry != nullptr);
-    		if(sentry->pc !=0) {
-    			    TrainingUnitEntry *pentry = trainingUnit.findEntry(sentry->pc, is_secure);
+    		if(sentry->entry !=nullptr) {
+    			    TrainingUnitEntry *pentry = sentry->entry;
     			    if(pentry != nullptr) {
     			    	    int64_t distance = pentry->local_timestamp - sentry->local_timestamp;
-    			    	    DPRINTF(HWPrefetch, "Replacing PC %x with PC %x, old distance %d\n",sentry->pc, pc, distance);
+    			    	    DPRINTF(HWPrefetch, "Replacing Entry %x with PC %x, old distance %d\n",sentry->entry, pc, distance);
     			    	    if(distance > max_size) {
     			    	        //TODO: Change max size to be relative, based on current tracking set?
     			            	trainingUnit.accessEntry(pentry);
     			            	if(!sentry->reused) { 
     			            		pentry->reuseConfidence--;
+						globalReuseConfidence--;
     			            	}
     			            	entry->replaceRate++; //only replacing oldies -- can afford to be more aggressive.
     			            } else if(distance > 0 && !sentry->reused) { //distance goes -ve due to lack of training-entry space
@@ -310,11 +339,11 @@ if(!use_bloom) {
     		}
     		assert(!sentry->isValid());
     		sentry->clear();
-    		historySampler.insertEntry(addr, is_secure, sentry);
-    		sentry->pc = pc;
+    		historySampler.insertEntry(entry->lastAddress, is_secure, sentry);
+    		sentry->entry = entry;
     		sentry->reused = false;
     		sentry->local_timestamp = entry->local_timestamp+1;
-    		sentry->last = entry->lastAddress;
+    		sentry->next = addr;
     		sentry->confident=false;
     	}
     }
@@ -325,7 +354,7 @@ if(!use_bloom) {
 		int res =    	sizeDuelPtr[x].checkAndInsert(addr,should_pf); //TODO: combine with hawk?
 		if(res==0)continue;
 		const int ratioNumer=(perfbias?4:2);
-		const int ratioDenom=4;//should_pf && entry->highHistoryConfidence >=upperHistory? 4 : 8;
+		const int ratioDenom=4;//should_pf && entry->highPatternConfidence >=upperHistory? 4 : 8;
 		int cache_hit = res%128;
 		int pref_hit = res/128;
 		int cache_set = cache_hit-1;
@@ -427,7 +456,7 @@ if(!use_bloom) {
 			int add = bloom_add(blptr, &index, sizeof(Addr));
 			if(!add) { target_size+=192;
 			
-			printf("Bloom: pc %ld conf %d %d %d rate %d\n", pc, entry->reuseConfidence+0,entry->patternConfidence+0,entry->highHistoryConfidence+0,entry->replaceRate+0);
+			//printf("Bloom: pc %ld conf %d %d %d rate %d\n", pc, entry->reuseConfidence+0,entry->patternConfidence+0,entry->highPatternConfidence+0,entry->replaceRate+0);
 			}
 		}
 
@@ -575,10 +604,10 @@ if(!use_bloom) {
    	 unsigned deg = 0;
   	 unsigned delay = cacheDelay;
   	 bool high_degree_pf = pf_target != nullptr
-  	         && (entry->highHistoryConfidence>upperHistory || !use_pattern2)/*&& pf_target->confident*/;
+  	         && (entry->highPatternConfidence>highUpperHistory || !use_pattern2)/*&& pf_target->confident*/;
    	 unsigned max = high_degree_pf? degree : (should_pf? 1 : 0);
    	 //if(pf_target == nullptr && should_pf) DPRINTF(HWPrefetch, "Target not found for %x, PC %x\n", target << lBlkSize, pc);
-   	 while (pf_target != nullptr && deg < max  /*&& (pf_target->confident || entry->highHistoryConfidence>upperHistory)*/
+   	 while (pf_target != nullptr && deg < max  /*&& (pf_target->confident || entry->highPatternConfidence>upperHistory)*/
    	 ) { //TODO: do we always pf at distance 1 if not confident?
     		DPRINTF(HWPrefetch, "Prefetching %x on miss at %x, PC \n", pf_target->address << lBlkSize, addr << lBlkSize, pc);
     		int extraDelay = cacheDelay;

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Checkpoint the first execution
+echo "Checkpointing simulation..."
+ cd /home/gem5/SPEC/benchspec/CPU2006/473.astar/run/run_base_ref_amd64-m64-gcc42-nn.0002
+ echo "Astar..."
+ /sbin/m5 checkpoint
+ ./astar_base.amd64-m64-gcc42-nn BigLakes2048.cfg
+  ./astar_base.amd64-m64-gcc42-nn BigLakes2048.cfg
+  echo "Astar done"
+  /sbin/m5 exit
+/sbin/m5 exit
+

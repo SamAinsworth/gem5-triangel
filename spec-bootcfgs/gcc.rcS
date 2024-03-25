@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Checkpoint the first execution
+echo "Checkpointing simulation..."
+ cd /home/gem5/SPEC/benchspec/CPU2006/403.gcc/run/run_base_ref_amd64-m64-gcc42-nn.0002
+ echo "Gcc 166..."
+ /sbin/m5 checkpoint
+ ./gcc_base.amd64-m64-gcc42-nn 166.i -o 166.s
+  echo "Gcc done"
+/sbin/m5 exit
+

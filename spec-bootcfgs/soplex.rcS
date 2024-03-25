@@ -1,0 +1,9 @@
+#!/bin/sh
+
+ cd /home/gem5/SPEC/benchspec/CPU2006/450.soplex/run/run_base_ref_amd64-m64-gcc42-nn.0000/
+ echo "Soplex..."
+ /sbin/m5 checkpoint
+ ./soplex_base.amd64-m64-gcc42-nn -m3500 ref.mps
+  echo "Soplex done"
+  /sbin/m5 exit
+

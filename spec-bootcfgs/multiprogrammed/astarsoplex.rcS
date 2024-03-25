@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Checkpoint the first execution
+#echo "Checkpointing simulation..."
+#/sbin/m5 checkpoint
+ cd /home/gem5/SPEC/benchspec/CPU2006/473.astar/run/run_base_ref_amd64-m64-gcc42-nn.0002
+ echo "Astar..."
+ taskset 1 ./astar_base.amd64-m64-gcc42-nn BigLakes2048.cfg &
+ cd /home/gem5/SPEC/benchspec/CPU2006/450.soplex/run/run_base_ref_amd64-m64-gcc42-nn.0000/
+ echo "Soplex2..."
+ taskset 2   ./soplex_base.amd64-m64-gcc42-nn -m3500 ref.mps &
+ wait
+echo "Both done"
+/sbin/m5 exit
+

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+ cd /home/gem5/SPEC/benchspec/CPU2006/482.sphinx3/run/run_base_ref_amd64-m64-gcc42-nn.0000/
+ echo "Sphinx..."
+  /sbin/m5 checkpoint
+ ./sphinx_livepretend_base.amd64-m64-gcc42-nn ctlfile . args.an4
+  echo "Sphinx done"
+  /sbin/m5 exit
+

@@ -65,6 +65,7 @@ Triage::Triage(
     cacheDelay(p.cache_delay),
     should_rearrange(p.should_rearrange),
     store_unreliable(p.store_unreliable),
+    lookahead_two(p.lookahead_two),
     max_size(p.address_map_actual_entries),
     size_increment(p.address_map_actual_entries/p.address_map_max_ways),
     global_timestamp(0),
@@ -128,12 +129,12 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
     if (entry != nullptr) {
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
-        index = entry->lastAddress;
+        index = lookahead_two? entry->lastLastAddress : entry->lastAddress;
 
     	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
         temporal = entry->temporal>=hawkeyeThreshold;
 
-        if(addr == entry->lastAddress) return; // to avoid repeat trainings on sequence.
+        if(addr == index) return; // to avoid repeat trainings on sequence.
 
         target = addr;
 
@@ -307,7 +308,9 @@ Triage::calculatePrefetch(const PrefetchInfo &pfi,
 
     // Update the entry
     if(entry != nullptr) {
+        entry->lastLastAddress = entry->lastAddress;
     	entry->lastAddress = addr;
+
     }
 
 

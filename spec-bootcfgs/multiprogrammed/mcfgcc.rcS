@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# Checkpoint the first execution
+#echo "Checkpointing simulation..."
+#/sbin/m5 checkpoint
+ cd /home/gem5/SPEC/benchspec/CPU2006/429.mcf/run/run_base_ref_amd64-m64-gcc42-nn.0000
+ echo "Mcf..."
+ taskset 1 ./mcf_base.amd64-m64-gcc42-nn inp.in &
+ cd /home/gem5/SPEC/benchspec/CPU2006/403.gcc/run/run_base_ref_amd64-m64-gcc42-nn.0002
+ echo "Gcc 166..."
+ for i in {1..30}
+ do
+ taskset 2  ./gcc_base.amd64-m64-gcc42-nn 166.i -o 166.s
+ done
+ wait
+echo "Both done"
+/sbin/m5 exit
+

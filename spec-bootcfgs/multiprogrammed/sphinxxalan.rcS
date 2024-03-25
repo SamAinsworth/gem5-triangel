@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Checkpoint the first execution
+#echo "Checkpointing simulation..."
+#/sbin/m5 checkpoint
+ cd /home/gem5/SPEC/benchspec/CPU2006/482.sphinx3/run/run_base_ref_amd64-m64-gcc42-nn.0000/
+ echo "Sphinx.."
+ taskset 1 ./sphinx_livepretend_base.amd64-m64-gcc42-nn ctlfile . args.an4 &
+cd /home/gem5/SPEC/benchspec/CPU2006/483.xalancbmk/run/run_base_ref_amd64-m64-gcc42-nn.0000
+echo "Xalan..."
+taskset 2 ./Xalan_base.amd64-m64-gcc42-nn  -v t5.xml xalanc.xsl &
+wait
+echo "Both done"
+/sbin/m5 exit
+

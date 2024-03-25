@@ -1,5 +1,11 @@
-sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu gfortran-aarch64-linux-gnu
-sudo apt-get install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi gfortran-arm-linux-gnueabi
-sudo apt-get install gnuplot
 sudo apt-get install g++ python-dev scons m4 swig
 sudo apt-get install zlib1g-dev
+
+#below for KVM support - https://www.gem5.org/documentation/general_docs/using_kvm/
+sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+sudo adduser `id -un` libvirt
+sudo adduser `id -un` kvm
+
+cd ..
+wget http://dist.gem5.org/dist/v21-2/kernels/x86/static/vmlinux-5.4.49
+cd run_scripts

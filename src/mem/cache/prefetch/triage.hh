@@ -73,6 +73,7 @@ class Triage : public Queued
     const unsigned cacheDelay;
     const bool should_rearrange;
     const bool store_unreliable;
+    const bool lookahead_two;
 
 
     const int max_size;
@@ -91,9 +92,10 @@ class Triage : public Queued
     struct TrainingUnitEntry : public TaggedEntry
     {
         Addr lastAddress;
+        Addr lastLastAddress; //Not in base triage -- for option of lookahead-2
         SatCounter8  temporal;
 
-        TrainingUnitEntry() : lastAddress(0), temporal(4,8)
+        TrainingUnitEntry() : lastAddress(0),lastLastAddress(0), temporal(4,8)
         {}
 
         void
@@ -101,6 +103,7 @@ class Triage : public Queued
         {
         	TaggedEntry::invalidate();
                 lastAddress = 0;
+                lastLastAddress = 0;
                 temporal.reset();
         }
 

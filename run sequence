@@ -1,18 +1,18 @@
  sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
 
-/home/sam/gem5-sabotriage/build/X86/gem5.opt /home/sam/gem5-sabotriage/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=/home/sam/gem5-sabotriage/x86-ubuntu --kernel=/home/sam/gem5-sabotriage/vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=/home/sam/gem5-sabotriage/configs/boot/hack_back_ckpt_omnet.rcS
+/home/sam/gem5-triangel/build/X86/gem5.opt /home/sam/gem5-triangel/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=/home/sam/gem5-triangel/x86-ubuntu --kernel=/home/sam/gem5-triangel/vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=/home/sam/gem5-triangel/configs/boot/hack_back_ckpt_omnet.rcS
 
 telnet localhost 3456
 m5 readfile > /tmp/script;chmod 755 /tmp/script;/tmp/script
 
-/home/sam/gem5-sabotriage/build/X86/gem5.opt /home/sam/gem5-sabotriage/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=/home/sam/gem5-sabotriage/x86-ubuntu --kernel=/home/sam/gem5-sabotriage/vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=/home/sam/gem5-sabotriage/configs/boot/hack_back_ckpt_omnet.rcS -r 1 --maxinsts=200000000000 --take-checkpoints=500000000000,500000000000 --max-checkpoints=20 
+/home/sam/gem5-triangel/build/X86/gem5.opt /home/sam/gem5-triangel/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=/home/sam/gem5-triangel/x86-ubuntu --kernel=/home/sam/gem5-triangel/vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=/home/sam/gem5-triangel/configs/boot/hack_back_ckpt_omnet.rcS -r 1 --maxinsts=200000000000 --take-checkpoints=500000000000,500000000000 --max-checkpoints=20 
 
 
 
 
 sed -i 's/system\.switch_cpus/system\.cpu/g' m5out/*/m5.cpt
 
-/home/sam/gem5-sabotriage/build/X86/gem5.opt /home/sam/gem5-sabotriage/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --cpu-type=X86O3CPU -r 2 --maxinsts=10000000 --pl2sl3cache
+/home/sam/gem5-triangel/build/X86/gem5.opt /home/sam/gem5-triangel/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --cpu-type=X86O3CPU -r 2 --maxinsts=10000000 --pl2sl3cache
 
 
 
@@ -20,7 +20,7 @@ sed -i 's/system\.switch_cpus/system\.cpu/g' m5out/*/m5.cpt
 
 for I in {2..21}
 do
-	/home/sam/gem5-sabotriage/build/X86/gem5.opt /home/sam/gem5-sabotriage/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --cpu-type=X86O3CPU -r $I --maxinsts=5000000 --pl2sl3cache --standard-switch 50000000 --warmup=50000000 --mem-type=LPDDR5_5500_1x16_8B_BL32
+	/home/sam/gem5-triangel/build/X86/gem5.opt /home/sam/gem5-triangel/configs/deprecated/example/fs.py -n 1 --mem-size=4GB --cpu-type=X86O3CPU -r $I --maxinsts=5000000 --pl2sl3cache --standard-switch 50000000 --warmup=50000000 --mem-type=LPDDR5_5500_1x16_8B_BL32
 	cat m5out/stats.txt >> m5out/statscat.txt
 done
 
