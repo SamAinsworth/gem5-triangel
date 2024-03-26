@@ -17,7 +17,7 @@ Software pre-requisites
 =======================
 
 * Linux operating system (We used Ubuntu 22.04)
-* A SPEC CPU2006 iso, placed in the root directory of the repository (We used v1.0).
+* A SPEC CPU2006 iso, if you are creating new checkpoints, placed in the root directory of the repository (We used v1.0).
 
 Installation and Building
 ========================
@@ -49,10 +49,18 @@ Then, in the scripts folder, to compile the Triangel gem5 simulator, run
 If you are running this as part of the ISCA artefact evaluation, we will provide the KVM checkpoints and Ubuntu image we evaluated on -- see the AE page for more details. Otherwise, you will be able to generate your own (with slightly different results due to differences in sampling) by following the details in the Generating Your Own Checkpoints section below.
 
 
+
+
 Running experimental workflows
 ==============================
 
-TODO
+Once you have checkpoints (in a folder per benchmark, with checkpoints themselves in an m5out folder within those benchmark folders) in the Checkpoints folder, and a disc image labeled "x86-ubuntu" in the repository root, you can run the experiments as follows, from the run_scripts folder as the current working directory:
+
+```
+./run_experiments.sh
+```
+
+This will run the experiments for figures 9-14 in the original paper, for each folder in Checkpoints in parallel (and should take around 5 hours total).
 
 If any unexpected behaviour is observed, please report it to the author.
 
@@ -62,8 +70,14 @@ If any unexpected behaviour is observed, please report it to the author.
 Validation of results
 ==============================
 
-TODO
+Once your experiments are finished, and again inside the run_scripts folder,
+run
 
+```
+./analyse_experiments.sh
+```
+
+This will print various metrics to the terminal. If you are using our exact checkpoints, these should match the ones in EXAMPLE_RESULTS.txt in the root directory. If you are using your own checkpoints of the same workloads, the trends should be comparable but the results will not be identical due to different sampling.
 
 Generating Your Own Checkpoints
 ==============================
@@ -154,7 +168,7 @@ You can repeat the above for the other workloads to get the full set.
 
 Customisation
 =======
-The prefetcher itself is implemented inside src/mem/cache/prefetch/ -- see Triangel.cc and Triage.cc. See Prefetcher.py in the same folder for the various options available -- and in configs/common/CacheConfig.py to see how they are connected. configs/common/Options.py shows the options available on the command line.
+The prefetcher itself is implemented inside src/mem/cache/prefetch/ -- see Triangel.cc and Triage.cc. See Prefetcher.py in the same folder for the various options available -- and in configs/common/CacheConfig.py to see how they are connected. configs/common/Options.py shows the options available on the command line. We also modified the cache system to allow reserving part of the L3 for prefetch metadata, and to model access-time delay to the Markov table -- see triangel.cc and modifications to the cache structures in the commit history for more details.
 
 
 
