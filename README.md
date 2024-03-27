@@ -140,7 +140,7 @@ and inside the telnet, run
 m5 readfile > /tmp/script;chmod 755 /tmp/script;/tmp/script
 ```
 
-This will generate your first checkpoint. While it is running, check the simticks gem5 reports as the point at which the checkpoint is generated (START), and the point at which simulation terminates (END). Divide the difference by 20 (or N, where N is the number of checkpoints you wish to generate), to get the spacing (in picoseconds) between your checkpoints.
+This will generate your first checkpoint. While it is running, check the simticks gem5 reports as the point at which the checkpoint is generated (START, printed after "Writing checkpoint", see below), and the point at which simulation terminates (END, printed after m5_exit, see below). Divide the difference by 20 (or N, where N is the number of checkpoints you wish to generate), to get the spacing (in picoseconds) between your checkpoints.
 
 To generate the remaining checkpoints, run
 
