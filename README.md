@@ -150,13 +150,28 @@ To generate the remaining checkpoints, run
 
 Where X is (START+(END-START)/20) and Y is (END-START)/20 (or N rather than 20, as appropriate).
 
+For example, in the output from gem5 above
+
+```
+Writing checkpoint
+src/sim/simulate.cc:194: info: Entering event queue @ 113102979477600.  Starting simulation...
+src/dev/x86/pc.cc:117: warn: Don't know what interrupt to clear for console.
+Exiting @ tick 134199564886000 because m5_exit instruction encountered
+src/cpu/kvm/base.cc:570: hack: Pretending totalOps is equivalent to totalInsts()
+```
+We would run with Y=(134199564886000-113102979477600)/20=1054829270420, and X = 113102979477600 + Y = 114157808748020, so
+
+```
+../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=../../vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../configs/boot/xalan.rcS -r 1 --take-checkpoints=114157808748020,1054829270420 --max-checkpoints=20 
+```
+
 Once this is done, run
 
 ```
 sed -i 's/system\.switch_cpus/system\.cpu/g' m5out/*/m5.cpt
 ```
 
-To correct the core names inside the checkpoints (otherwise gem5 will throw an error when it tries to use them).
+To correct the core names inside the new checkpoints (otherwise gem5 will throw an error when it tries to use them, from trying to restore from "cpu" instead of "switch_cpus").
 
 Now, you should be able to run simulations on each checkpoint, for example
 
