@@ -11,7 +11,7 @@ Including a modified gem5 simulator with implementations of Triangel and Triage 
 
 Hardware pre-requisities
 ========================
-* A native (non-virtualized) x86-64 system preferably with sudo access (to install dependencies and enable KVM if disabled).
+* A native (non-virtualized) x86-64 system preferably with sudo access (to install dependencies and enable KVM if disabled, the latter only if you are generating new checkpoints).
 
 Software pre-requisites
 =======================
