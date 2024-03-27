@@ -91,7 +91,7 @@ Name it "cpu2006.iso" or change the script as appropriate.
 Then, from the scripts directory, run
 
 ```
-./build_spec06.sh
+./build_spec.sh
 ```
 
 Once this has successfully completed, it will build and set up run directories for all of the benchmarks.
