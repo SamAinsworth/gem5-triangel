@@ -150,7 +150,7 @@ To generate the remaining checkpoints, run
 
 Where X is (START+(END-START)/20) and Y is (END-START)/20 (or N rather than 20, as appropriate).
 
-For example, in the output from gem5 above
+For example, with the output from gem5 below
 
 ```
 Writing checkpoint
