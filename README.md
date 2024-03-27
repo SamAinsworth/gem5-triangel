@@ -48,7 +48,9 @@ Then, in the scripts folder, to compile the Triangel gem5 simulator, run
 
 If you are running this as part of the ISCA artefact evaluation, we will provide the KVM checkpoints and Ubuntu image we evaluated on -- see the AE page for more details. Otherwise, you will be able to generate your own (with slightly different results due to differences in sampling) by following the details in the Generating Your Own Checkpoints section below.
 
+Checkpoints should be in a folder, per-benchmark, inside the ``Checkpoints'' folder at the root of the repository (e.g. Xalan checkpoints are stored inside gem5-triangel/Checkpoints/Xalan/m5out/cpt*).
 
+Your Ubuntu image, for gem5 to access in FS mode, should be in the root of the directory, as x86-ubuntu (either pre-provided or generated as in Generating Your Own Checkpoints below).
 
 
 Running experimental workflows
