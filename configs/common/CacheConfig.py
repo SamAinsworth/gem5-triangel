@@ -268,8 +268,7 @@ def config_cache(options, system):
                         sctags=dcache.tags,
                         use_bloom=True
                     )
-                )      
-                )                 
+                )                   
             elif options.triangelnoscs:
                  l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
@@ -277,8 +276,7 @@ def config_cache(options, system):
                         sctags=dcache.tags,
                         use_scs=False
                     )
-                )      
-                )    
+                )        
             elif options.triangelnoscs:
                  l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
@@ -287,7 +285,6 @@ def config_cache(options, system):
                         use_pattern=False
                     )
                 )      
-                )    
             elif options.triangelnopattern2:
                  l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
@@ -296,7 +293,6 @@ def config_cache(options, system):
                         use_pattern2=False
                     )
                 )      
-                )            
             elif options.triangelnoreuse:
                  l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
@@ -305,7 +301,6 @@ def config_cache(options, system):
                         use_reuse=False
                     )
                 )      
-                )   
             elif options.triangelperfbias:
                  l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
@@ -314,7 +309,6 @@ def config_cache(options, system):
                         perfbias=True
                     )
                 )      
-                )                                                               
             elif options.triangelhawk:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(

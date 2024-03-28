@@ -1,7 +1,7 @@
 sudo apt-get install g++ python3 scons m4 swig
 sudo apt-get install zlib1g-dev
 sudo apt-get install python3-pip
-
+sudo apt-get install libgoogle-perftools-dev
 
 #below for KVM support - https://www.gem5.org/documentation/general_docs/using_kvm/
 sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
