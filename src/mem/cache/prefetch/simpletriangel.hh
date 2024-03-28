@@ -83,12 +83,17 @@ class SimpleTriangel : public Queued
     const int max_size;
     const int size_increment;
     static int64_t global_timestamp;
+    uint64_t second_chance_timestamp;
     uint64_t lowest_blocked_entry;
     static int current_size;
     static int target_size;
     const int maxWays;    
     
     std::vector<int> way_idx;
+    
+        SatCounter8  globalReuseConfidence;
+        SatCounter8  globalPatternConfidence;
+        SatCounter8 globalHighPatternConfidence;    
    
 
     struct TrainingUnitEntry : public TaggedEntry
@@ -98,7 +103,7 @@ class SimpleTriangel : public Queued
         int64_t local_timestamp;
         SatCounter8  reuseConfidence;
         SatCounter8  patternConfidence;
-        SatCounter8 highHistoryConfidence;
+        SatCounter8 highPatternConfidence;
         SatCounter8 replaceRate;
         SatCounter8 hawkConfidence;
         bool lastAddressSecure;
@@ -107,7 +112,7 @@ class SimpleTriangel : public Queued
 
 
 
-        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0),reuseConfidence(4,8), patternConfidence(4,8), highHistoryConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),currently_twodist_pf(false)
+        TrainingUnitEntry() : lastAddress(0), lastLastAddress(0), local_timestamp(0),reuseConfidence(4,8), patternConfidence(4,8), highPatternConfidence(4,8), replaceRate(4,8), hawkConfidence(4,8), lastAddressSecure(false), lastLastAddressSecure(false),currently_twodist_pf(false)
         {}
 
         void
@@ -116,11 +121,13 @@ class SimpleTriangel : public Queued
         	TaggedEntry::invalidate();
                 lastAddress = 0;
                 lastLastAddress = 0;
-                local_timestamp=0;
+                //local_timestamp=0; //Don't reset this, to handle replacement and still give contiguity of timestamp
                 reuseConfidence.reset();
                 patternConfidence.reset();
+                highPatternConfidence.reset();
                 replaceRate.reset();
                 currently_twodist_pf = false;
+                
         }
     };
     /** Map of PCs to Training unit entries */
@@ -257,12 +264,13 @@ assert(idx>=0);
     /** Sample unit entry, tagged by data address, stores PC, timestamp, next element **/
     struct SampleEntry : public TaggedEntry
     {
-    	Addr pc;
+    	TrainingUnitEntry* entry;
     	bool reused;
     	uint64_t local_timestamp;
-    	Addr last;
+    	Addr next;
+    	bool confident;
 
-    	SampleEntry() : pc(0), reused(false), local_timestamp(0), last(0)
+    	SampleEntry() : entry(nullptr), reused(false), local_timestamp(0), next(0)
         {}
 
         void
@@ -272,10 +280,11 @@ assert(idx>=0);
         }
 
         void clear() {
-                pc = 0;
+                entry=nullptr;
                 reused = false;
                 local_timestamp=0;
-                last = 0;
+                next = 0;
+                confident=false;
         }
     };
     AssociativeSet<SampleEntry> historySampler;
@@ -284,11 +293,10 @@ assert(idx>=0);
     struct SecondChanceEntry: public TaggedEntry
     {
     	Addr pc;
-    	uint64_t local_timestamp;
+    	uint64_t global_timestamp;
     	bool used;
     };
     AssociativeSet<SecondChanceEntry> secondChanceUnit;
-
 
     /** History mappings table */
     AssociativeSet<MarkovMapping> markovTable;

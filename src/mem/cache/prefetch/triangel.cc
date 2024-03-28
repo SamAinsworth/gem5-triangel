@@ -191,7 +191,7 @@ if(!use_bloom) {
     }
 
     bool is_secure = pfi.isSecure();
-    Addr pc = pfi.getPC()>>2; //Shifted by 2 to help Arm indexing
+    Addr pc = pfi.getPC()>>2; //Shifted by 2 to help Arm indexing. Bit fake; really should xor in these bits with upper bits.
 
 
     // Looks up the last address at this PC
@@ -211,7 +211,7 @@ if(!use_bloom) {
     bool should_pf=false;
     bool should_hawk=false;
     bool should_sample = false;
-    if (entry != nullptr) {
+    if (entry != nullptr) { //This accesses the training table at this PC.
         trainingUnit.accessEntry(entry);
         correlated_addr_found = true;
         index = entry->lastAddress;
@@ -243,7 +243,7 @@ if(!use_bloom) {
 
 
     if(correlated_addr_found) {
-    	//Check test unit for a recent history...
+    	//Check second-chance sampler for a recent history. If so, update pattern confidence accordingly.
     	SecondChanceEntry* tentry = secondChanceUnit.findEntry(addr, is_secure);
     	if(tentry!= nullptr && !tentry->used) {
     		tentry->used=true;
@@ -263,7 +263,7 @@ if(!use_bloom) {
 		}
     	}
     	
-    	//Check sample table for entry.
+    	//Check history sampler for entry.
     	SampleEntry *sentry = historySampler.findEntry(entry->lastAddress, is_secure);
     	if(sentry != nullptr && sentry->entry == entry) {    		
     		
@@ -287,7 +287,7 @@ if(!use_bloom) {
     		}
     		
     		else {
-
+    			//We haven't spotted the (x,y) pattern we expect, on seeing y. So put x in the SCS.
 			if(use_scs) {
 				SecondChanceEntry* tentry = secondChanceUnit.findVictim(addr);
 				if(tentry->pc !=0 && !tentry->used) {
@@ -316,7 +316,7 @@ if(!use_bloom) {
     		     	    	sentry->confident = willBeConfident;
     	}
     	else if(should_sample || randomChance(entry->reuseConfidence,entry->replaceRate)) {
-    		//Fill sample table
+    		//Fill sample table, as we're taking a sample at this PC. Should_sample also set by randomChance earlier, on first insert of PC intro training table.
     		sentry = historySampler.findVictim(entry->lastAddress);
     		assert(sentry != nullptr);
     		if(sentry->entry !=nullptr) {
@@ -328,6 +328,7 @@ if(!use_bloom) {
     			    	        //TODO: Change max size to be relative, based on current tracking set?
     			            	trainingUnit.accessEntry(pentry);
     			            	if(!sentry->reused) { 
+    			            	    	//Reuse conf decremented, as very old.
     			            		pentry->reuseConfidence--;
 						globalReuseConfidence--;
     			            	}
@@ -351,14 +352,15 @@ if(!use_bloom) {
     if(!use_bloom) {
 	    
 	    for(int x=0;x<(smallduel? 32 :64);x++) {
+	    	//Here we update the size duellers, to work out for each cache set whether it is better to be markov table or L3 cache.
 		int res =    	sizeDuelPtr[x].checkAndInsert(addr,should_pf); //TODO: combine with hawk?
 		if(res==0)continue;
 		const int ratioNumer=(perfbias?4:2);
 		const int ratioDenom=4;//should_pf && entry->highPatternConfidence >=upperHistory? 4 : 8;
-		int cache_hit = res%128;
-		int pref_hit = res/128;
-		int cache_set = cache_hit-1;
-		int pref_set = pref_hit-1;
+		int cache_hit = res%128; //This is just bit encoding of cache hits.
+		int pref_hit = res/128; //This is just bit encoding of prefetch hits.
+		int cache_set = cache_hit-1; //Encodes which nth most used replacement-state we hit at, if any.
+		int pref_set = pref_hit-1; //Encodes which nth most used replacement-state we hit at, if any.
 		assert(!cache_hit || (cache_set<setPrefetch.size()-1 && cache_set>=0));
 		assert(!pref_hit || (pref_set<setPrefetch.size()-1 && pref_set>=0));
 		if(cache_hit) for(int y= setPrefetch.size()-2-cache_set; y>=0; y--) setPrefetch[y]++; 
@@ -372,6 +374,7 @@ if(!use_bloom) {
 	    
 
 	    if(global_timestamp > 500000) {
+	    //Here we choose the size of the Markov table based on the optimum for the last epoch
 	    int counterSizeSeen = 0;
 
 	    for(int x=0;x<setPrefetch.size() && x*size_increment <= max_size;x++) {
@@ -382,15 +385,15 @@ if(!use_bloom) {
 	    }
 
 	    int currentscore = setPrefetch[current_size/size_increment];
-	    currentscore = currentscore + (currentscore>>4);
+	    currentscore = currentscore + (currentscore>>4); //Slight bias against changing for minimal benefit.
 	    int targetscore = setPrefetch[target_size/size_increment];
 
 	    if(target_size != current_size && targetscore>currentscore) {
 	    	current_size = target_size;
 		printf("size: %d, tick %ld \n",current_size,curTick());
-		for(int x=0;x<setPrefetch.size(); x++) {
-			printf("%d: %d\n", x, setPrefetch[x]);
-		}
+		//for(int x=0;x<setPrefetch.size(); x++) {
+		//	printf("%d: %d\n", x, setPrefetch[x]);
+		//}
 		assert(current_size >= 0);
 		
 	
@@ -445,6 +448,7 @@ if(!use_bloom) {
 
 
     if(useHawkeye && correlated_addr_found && should_pf) {
+        // If a correlation was found, update the Markov table accordingly
         	for(int x=0; x<64; x++)hawksets[x].add(addr,pc,&trainingUnit);
         	should_hawk = entry->hawkConfidence>7;
     }
@@ -551,7 +555,7 @@ if(!use_bloom) {
     
     
     if (correlated_addr_found && should_pf && (current_size>0)) {
-        // If a correlation was found, update the History table accordingly
+        // If a correlation was found, update the Markov table accordingly
 	//DPRINTF(HWPrefetch, "Tabling correlation %x to %x, PC %x\n", index << lBlkSize, target << lBlkSize, pc);
 	MarkovMapping *mapping = getHistoryEntry(index, is_secure,false,false,false, should_hawk);
 	if(mapping == nullptr) {
@@ -563,7 +567,7 @@ if(!use_bloom) {
         assert(mapping != nullptr);
         bool confident = mapping->address == target; 
         bool wasConfident = mapping->confident;
-        mapping->confident = confident;
+        mapping->confident = confident; //Confidence is just used for replacement. I haven't tested how important it is for performance to use it; this is inherited from Triage.
         if(!wasConfident) {
         	mapping->address = target;
         }
@@ -629,7 +633,6 @@ if(!use_bloom) {
     		
     		if(extraDelay == cacheDelay) addresses.push_back(AddrPriority(lookup << lBlkSize, delay));
     		delay += extraDelay;
-    		//if(extraDelay < cacheDelay && high_degree_pf && max<4) max++;
     		deg++;
     		
     		if(deg<max /*&& pf_target->confident*/) pf_target = getHistoryEntry(lookup, is_secure,false,true,false, should_hawk);
@@ -653,6 +656,7 @@ if(!use_bloom) {
 Triangel::MarkovMapping*
 Triangel::getHistoryEntry(Addr paddr, bool is_secure, bool add, bool readonly, bool clearing, bool hawk)
 {
+	//The weird parameters above control whether we replace entries, and how the number of metadata accesses are updated, for instance. They're basically a simulation thing.
   	    TriangelHashedSetAssociative* thsa = dynamic_cast<TriangelHashedSetAssociative*>(markovTablePtr->indexingPolicy);
 	  				if(!thsa)  assert(0);  
 
@@ -738,6 +742,7 @@ TriangelHashedSetAssociative::extractTag(const Addr addr) const
     Addr offset = addr / (numSets/max_ways); 
     int result = 0;
     
+    //This is a tag# as described in the Triangel paper.
     const int shiftwidth=10;
 
     for(int x=0; x<64; x+=shiftwidth) {

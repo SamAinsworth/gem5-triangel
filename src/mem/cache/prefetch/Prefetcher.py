@@ -960,7 +960,7 @@ class SimpleTriangelPrefetcher(QueuedPrefetcher):
         16, "Associativity of the History Table"
     )  # TODO: assert = address_map_line_assoc * cache assoc / 2
     address_map_cache_indexing_policy = Param.BaseIndexingPolicy(
-        TriangelHashedSetAssociative(
+        SimpleTriangelHashedSetAssociative(
             entry_size=1,
             assoc=Parent.address_map_rounded_cache_assoc,
             size=Parent.address_map_rounded_entries,
