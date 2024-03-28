@@ -64,6 +64,8 @@ Once you have checkpoints (in a folder per benchmark, with checkpoints themselve
 
 This will run the experiments for figures 9-14 in the original paper, for each folder in Checkpoints in parallel (and should take around 5 hours total).
 
+Stdout is redirected to a file inside each folder in Checkpoints. If you are having issues, check these files, or alter the script to remove the redirection and the "&" which runs each folder in parallel.
+
 If any unexpected behaviour is observed, please report it to the author.
 
 
