@@ -23,10 +23,10 @@ do
 	  
 	for run in NoPF $compare1 $compare2 $compare3 $compare4
 	do
-	 time[$run]=$(grep simSeconds $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=($S1>1.0?0:$S1)} END {printf "%.5f\n", s}')
+	 time[$run]=$(grep simSeconds m5out/*$run*.txt | awk '{print $2}' | awk '{s+=($S1>1.0?0:$S1)} END {printf "%.5f\n", s}')
 	 #Conditional above catches the bug with accidentally running Kernel code with tiny IPC dominating results.
 	 speedup[$run]=$(echo "scale=5; (${time[NoPF]})/(${time[$run]})" | bc)
-	 samples[$run]=$(grep simSeconds $1*/m5out/*$run*.txt | wc -l)
+	 samples[$run]=$(grep simSeconds m5out/*$run*.txt | wc -l)
 	done  
 
 
@@ -43,8 +43,8 @@ do
 
 	for run in NoPF $compare1 $compare2 $compare3 $compare4
 	do
-	 dramreads[$run]=$(grep bytesRead::tot $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
-	 dramwrites[$run]=$(grep bytesWritten::tot $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 dramreads[$run]=$(grep bytesRead::tot m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 dramwrites[$run]=$(grep bytesWritten::tot m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
 	 dramratio[$run]=$(echo "scale=5; (${dramreads[$run]}+${dramwrites[$run]})/(${dramreads[NoPF]} + ${dramwrites[NoPF]})" | bc)
 	done
 	 
@@ -62,8 +62,8 @@ do
 
 	for run in NoPF $compare1 $compare2 $compare3 $compare4
 	do
-	 l3s[$run]=$(grep l3.overallAccesses::total $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
-	 metas[$run]=$(grep l2cache.prefetcher.metadataAccess $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 l3s[$run]=$(grep l3.overallAccesses::total m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 metas[$run]=$(grep l2cache.prefetcher.metadataAccess m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
 	 l3rat[$run]=$(echo "scale=5; (${l3s[$run]}+${metas[$run]})/${l3s[NoPF]}" | bc)
 	 
 	 l3energy[$run]=$(echo "scale=5; (64*${l3s[$run]}+64*${metas[$run]})/(64*${l3s[NoPF]}+64*${metas[NoPF]}+25*${dramreads[NoPF]}+25*${dramwrites[NoPF]})" | bc)
@@ -87,8 +87,8 @@ do
 
 	for run in $compare1 $compare2 $compare3 $compare4
 	do
-	 pfused[$run]=$(grep l2cache.prefetcher.pfUseful $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
-	 pfunused[$run]=$(grep l2cache.prefetcher.pfUnused $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 pfused[$run]=$(grep l2cache.prefetcher.pfUseful m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 pfunused[$run]=$(grep l2cache.prefetcher.pfUnused m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
 	 accuracy[$run]=$(echo "scale=5; (${pfused[$run]})/(${pfused[$run]}+${pfunused[$run]})" | bc)
 	done
 	 
@@ -101,7 +101,7 @@ do
 
 	for run in NoPF $compare1 $compare2 $compare3 $compare4
 	do
-	 pfmissed[$run]=$(grep l2cache.demandMisses::switch_cpus_1.data $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	 pfmissed[$run]=$(grep l2cache.demandMisses::switch_cpus_1.data m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
 	 coverage[$run]=$(echo "scale=5; 1-((${pfmissed[$run]})/(${pfmissed[NoPF]}))" | bc)
 	done
 	 
@@ -115,8 +115,8 @@ do
 
 	for run in $compare1 $compare2
 	do
-	lookupCorrect[$run]=$(grep l2cache.prefetcher.lookupCorrect $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
-	lookupWrong[$run]=$(grep l2cache.prefetcher.lookupWrong $1*/m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	lookupCorrect[$run]=$(grep l2cache.prefetcher.lookupCorrect m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
+	lookupWrong[$run]=$(grep l2cache.prefetcher.lookupWrong m5out/*$run*.txt | awk '{print $2}' | awk '{s+=$S1} END {printf "%.0f\n", s}')
 	lookupacc[$run]=$(echo "scale=5; (${lookupCorrect[$run]})/(${lookupCorrect[$run]}+${lookupWrong[$run]})" | bc)
 	done
 
