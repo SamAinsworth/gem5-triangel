@@ -1,4 +1,4 @@
-sudo apt-get install g++ python-dev scons m4 swig
+sudo apt-get install g++ python3 scons m4 swig
 sudo apt-get install zlib1g-dev
 
 #below for KVM support - https://www.gem5.org/documentation/general_docs/using_kvm/
