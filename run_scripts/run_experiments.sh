@@ -1,7 +1,7 @@
 
 cd ..
 HOME=$(pwd)
-STATS=$(date -I)
+STATS=$(date --iso-8601=seconds)
 cd Checkpoints
 
 for BENCH in *
