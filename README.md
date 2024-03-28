@@ -56,7 +56,7 @@ Your Ubuntu image, for gem5 to access in FS mode, should be in the root of the d
 Running experimental workflows
 ==============================
 
-Once you have checkpoints (in a folder per benchmark, with checkpoints themselves in an m5out folder within those benchmark folders) in the Checkpoints folder, and a disc image labeled "x86-ubuntu" in the repository root, you can run the experiments as follows, from the run_scripts folder as the current working directory:
+Once you have checkpoints (in a folder per benchmark, with checkpoints themselves in an m5out folder within those benchmark folders) in the Checkpoints folder (e.g. gem5-triangel/Checkpoints/Xalan/m5out/cpt*) , and a disc image labeled "x86-ubuntu" in the repository root, you can run the experiments as follows, from the run_scripts folder as the current working directory:
 
 ```
 ./run_experiments.sh
