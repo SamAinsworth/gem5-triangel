@@ -249,71 +249,60 @@ def config_cache(options, system):
             dcache = dcache_class()
             if options.triangel:
                 l2_cache = l2_cache_class(
-                    prefetcher=SimpleTriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        cache_delay=25,
+                    prefetcher=TriangelPrefetcher(
+                        cachetags=system.l3.tags,#To take a partition of for the Markov table.
+                        cache_delay=25, #5 cycles more than the L3 cache itself
                         degree=4,
                         address_map_max_ways=8,
+                        #The below params assume 1MiB partition max of a 2MiB 16-way cache (So 8 max_ways).
+                        #The density is 12 entries per cache line (actual_cache_assoc) unlike Triage's 16
+                        #And the rounded version sets everything to a power of two -- with the difference between
+                        #actual and rounded based on that ratio between 12 and 16 here.
                         address_map_actual_entries="196608",
                         address_map_actual_cache_assoc=12,
                         address_map_rounded_entries="262144",
                         address_map_rounded_cache_assoc=16,
+                        #ablation study to disable/retune features
+                        use_bloom=options.triangelbloom,
+                        use_scs= not options.triangelnoscs,
+                        timed_scs=True,
+                        use_pattern= not options.triangelnopattern,
+                        use_pattern2= not options.triangelnopattern2,
+                        use_reuse= not options.triangelnoreuse,
+                        perfbias = options.triangelperfbias, #Adjusts tuning params to make it more aggressive and less DRAM/L3-partition friendly.
+                        should_rearrange = not options.triangelnorearr,
+                        use_mrb = not options.triangelnomrb
+                        
+                        
                     )
-                )
-            elif options.triangelbloom:
-                 l2_cache = l2_cache_class(
+                )     
+            elif options.triangeldual: 
+                #two-core setup. Assumes 4M 16-way L3.
+                #Note that the size doubles and the number of ways stays the same
+                #As in the 1-core version, unlike Triage which does the opposite.
+                #This is because Triangel's L3 Markov table is shared, whereas
+                #Triage has private partitions in the L3.
+                l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        use_bloom=True
+                        cache_delay=25,
+                        address_map_actual_entries="393216",
+                        address_map_rounded_entries="524288",
+                        use_bloom=options.triangelbloom,
+                        use_scs= not options.triangelnoscs,
+                        use_pattern= not options.triangelnopattern,
+                        use_pattern2= not options.triangelnopattern2,
+                        use_reuse= not options.triangelnoreuse,
+                        perfbias = options.triangelperfbias,
+                        should_rearrange = not options.triangelnorearr,
+                        use_mrb = not options.triangelnomrb
                     )
-                )                   
-            elif options.triangelnoscs:
-                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        use_scs=False
-                    )
-                )        
-            elif options.triangelnoscs:
-                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        use_pattern=False
-                    )
-                )      
-            elif options.triangelnopattern2:
-                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        use_pattern2=False
-                    )
-                )      
-            elif options.triangelnoreuse:
-                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        use_reuse=False
-                    )
-                )      
-            elif options.triangelperfbias:
-                 l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        perfbias=True
-                    )
-                )      
+                )     
+            #The following cases could be rolled together if better parameterised...  sorry!
             elif options.triangelhawk:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
                         use_hawkeye=True,
                         address_map_cache_replacement_policy=WeightedLRURP()
                     )
@@ -322,31 +311,28 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,                        
                         degree=1,
                     )
                 )
+            elif options.triangeldeg1off1:
+                l2_cache = l2_cache_class(
+                    prefetcher=TriangelPrefetcher(
+                        cachetags=system.l3.tags,
+                        degree=1,
+                        should_lookahead=False,                        
+                    )
+                )                
             elif options.triangeloff1:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
                         should_lookahead=False,
                     )
                 )
-            elif options.triangelnorearr:
+            elif options.triangel256luthawk:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
-                        should_rearrange=False,
-                    )
-                )
-            elif options.triangel256:
-                l2_cache = l2_cache_class(
-                    prefetcher=TriangelPrefetcher(
-                        cachetags=system.l3.tags,
-                        sctags=dcache.tags,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
@@ -357,11 +343,10 @@ def config_cache(options, system):
                         address_map_cache_replacement_policy=WeightedLRURP(),
                     )
                 )
-            elif options.triangel256lru:
+            elif options.triangel256lutlru:
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
@@ -375,7 +360,6 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,                        
                         address_map_max_ways=2,
                         address_map_actual_entries="65536",
                         address_map_actual_cache_assoc=16,
@@ -391,7 +375,6 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriangelPrefetcher(
                         cachetags=system.l3.tags,
-                        sctags=dcache.tags,
                         metadata_reuse_entries="128",
                         secondchance_entries="16",
                         sample_entries="128",
@@ -415,20 +398,39 @@ def config_cache(options, system):
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
+                        degree=4,
+                        lookahead_two=options.triagelookaheadtwo
                     )
-                )                
+                )
+            elif options.triagedual:
+                l2_cache = l2_cache_class(
+                    prefetcher=TriagePrefetcher(
+                        cachetags=system.l3.tags,
+                        address_map_max_ways=4, #This halves assuming 4M cache -- as each core's Triage gets own partition.
+                    )
+                )
+            elif options.triagedeg4dual:
+                l2_cache = l2_cache_class(
+                    prefetcher=TriagePrefetcher(
+                        cachetags=system.l3.tags,
+                        degree=4,
+                        address_map_max_ways=4,
+                    )
+                )                                
             elif options.triagenorearr:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
                         should_rearrange=False,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triageideal:
                 l2_cache = l2_cache_class(
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
-                        lookup_assoc=0
+                        lookup_assoc=0,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triagefalut:
@@ -436,6 +438,7 @@ def config_cache(options, system):
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
                         lookup_assoc=1024,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triage12:
@@ -448,6 +451,7 @@ def config_cache(options, system):
                         address_map_rounded_entries="262144",
                         address_map_rounded_cache_assoc=16,
                         lookup_assoc=0,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triage10boff:
@@ -455,6 +459,7 @@ def config_cache(options, system):
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
                         lookup_offset=10,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triagenounrel:
@@ -462,6 +467,7 @@ def config_cache(options, system):
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
                         store_unreliable=False,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triagelru:
@@ -469,6 +475,7 @@ def config_cache(options, system):
                     prefetcher=TriagePrefetcher(
                         cachetags=system.l3.tags,
                         address_map_cache_replacement_policy=LRURP(),
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triage256:
@@ -480,6 +487,7 @@ def config_cache(options, system):
                         address_map_actual_cache_assoc=16,
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triage256rrip:
@@ -492,6 +500,7 @@ def config_cache(options, system):
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
                         address_map_cache_replacement_policy=RRIPRP(),
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             elif options.triagelru256:
@@ -504,6 +513,7 @@ def config_cache(options, system):
                         address_map_rounded_entries="65536",
                         address_map_rounded_cache_assoc=16,
                         address_map_cache_replacement_policy=LRURP(),
+                        lookahead_two=options.triagelookaheadtwo
                     )
                 )
             else:
