@@ -127,7 +127,7 @@ Now, for each workload in the spec-bootcfgs folder, boot up gem5 and generate ch
 cd Checkpoints
 mkdir Xalan
 cd Xalan
-../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=/home/sam/gem5-triangel/vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../spec-bootcfgs/xalan.rcS
+../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=../../vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../spec-bootcfgs/xalan.rcS
 ```
 
 Once this has booted, telnet in (assuming gem5 is running on port 3456 as default) and run the provided script:
