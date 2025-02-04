@@ -289,7 +289,7 @@ if(!use_bloom) {
     		else {
     			//We haven't spotted the (x,y) pattern we expect, on seeing y. So put x in the SCS.
 			if(use_scs) {
-				SecondChanceEntry* tentry = secondChanceUnit.findVictim(addr);
+				SecondChanceEntry* tentry = secondChanceUnit.findVictim(sentry->next);
 				if(tentry->pc !=0 && !tentry->used) {
     			   		TrainingUnitEntry *pentry = trainingUnit.findEntry(tentry->pc, is_secure);	
     			   		if(pentry != nullptr) {
@@ -618,7 +618,7 @@ if(!use_bloom) {
     		if(lastAccessFromPFCache && use_mrb) {
     			Cycles time = curCycle() - pf_target->cycle_issued;
     			if(time >= cacheDelay) extraDelay = 0;
-    			else if (time < cacheDelay) extraDelay = time;
+    			else if (time < cacheDelay) extraDelay = cacheDelay-time;
     		}
     		
     		Addr lookup = pf_target->address;

@@ -92,11 +92,11 @@ class Queued : public Base
 
         bool operator>(const DeferredPacket& that) const
         {
-            return priority > that.priority;
+            return tick < that.tick;
         }
         bool operator<(const DeferredPacket& that) const
         {
-            return priority < that.priority;
+            return tick > that.tick;
         }
         bool operator<=(const DeferredPacket& that) const
         {
