@@ -150,7 +150,7 @@ To generate the remaining checkpoints, run
 ../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=../../vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../configs/boot/xalan.rcS -r 1 --take-checkpoints=X,Y --max-checkpoints=20 
 ```
 
-Where X is (START+(END-START)/20) and Y is (END-START)/20 (or N rather than 20, as appropriate).
+Where X is (END-START)/20 and Y is also (END-START)/20 (or N rather than 20, as appropriate).
 
 For example, with the output from gem5 below
 
@@ -161,10 +161,10 @@ src/dev/x86/pc.cc:117: warn: Don't know what interrupt to clear for console.
 Exiting @ tick 134199564886000 because m5_exit instruction encountered
 src/cpu/kvm/base.cc:570: hack: Pretending totalOps is equivalent to totalInsts()
 ```
-We would run with Y=(134199564886000-113102979477600)/20=1054829270420, and X = 113102979477600 + Y = 114157808748020, so
+We would run with X=Y=(134199564886000-113102979477600)/20=1054829270420, so
 
 ```
-../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=../../vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../configs/boot/xalan.rcS -r 1 --take-checkpoints=114157808748020,1054829270420 --max-checkpoints=20 
+../../build/X86/gem5.opt ../../configs/deprecated/example/fs.py -n 1 --mem-size=4GB --disk-image=../../x86-ubuntu --kernel=../../vmlinux-5.4.49 --cpu-type=X86KvmCPU --script=../../configs/boot/xalan.rcS -r 1 --take-checkpoints=1054829270420,1054829270420 --max-checkpoints=20 
 ```
 
 Once this is done, run
