@@ -73,6 +73,7 @@ class ReplaceableEntry
     uint32_t _way;
 
   public:
+    bool reserved;
     ReplaceableEntry() = default;
     virtual ~ReplaceableEntry() = default;
 
@@ -93,6 +94,7 @@ class ReplaceableEntry
     {
         _set = set;
         _way = way;
+        reserved = false;
     }
 
     /**

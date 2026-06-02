@@ -187,6 +187,7 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
                 delete itr->pkt;
                 itr = pfq.erase(itr);
                 statsQueued.pfRemovedDemand++;
+                if(pkt->req->hasPC())pfLate(pkt->req->getPC());
             } else {
                 ++itr;
             }

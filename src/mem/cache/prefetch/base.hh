@@ -53,6 +53,7 @@
 #include "base/statistics.hh"
 #include "base/types.hh"
 #include "mem/cache/cache_blk.hh"
+#include "mem/cache/base.hh"
 #include "mem/packet.hh"
 #include "mem/request.hh"
 #include "sim/byteswap.hh"
@@ -85,7 +86,20 @@ class Base : public ClockedObject
         const bool miss;
     };
 
-    std::vector<PrefetchListener *> listeners;
+
+
+    class PrefetchEvictListener : public ProbeListenerArgBase<BaseCache::DataUpdate>
+    {
+      public:
+        PrefetchEvictListener(Base &_parent, ProbeManager *pm,
+                              const std::string &name)
+            : ProbeListenerArgBase(pm, name), parent(_parent) {}
+        void notify(const BaseCache::DataUpdate &info) override;
+      protected:
+        Base &parent;
+    };
+
+    std::vector<ProbeListener *> listeners;
 
   public:
 
@@ -273,7 +287,9 @@ class Base : public ClockedObject
 
     /** Only consult prefetcher on cache misses? */
     const bool onMiss;
-
+    public:
+    const bool onDuplicateMiss;
+	protected:
     /** Consult prefetcher on reads? */
     const bool onRead;
 
@@ -339,12 +355,13 @@ class Base : public ClockedObject
         statistics::Scalar pfUnused;
         /** The number of times a HW-prefetch is useful. */
         statistics::Scalar pfUseful;
+        statistics::Scalar pfUsefulNotTimely;
         /** The number of times there is a hit on prefetch but cache block
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
         statistics::Formula accuracy;
         statistics::Formula coverage;
-
+		statistics::Formula timeliness;
         /** The number of times a HW-prefetch hits in cache. */
         statistics::Scalar pfHitInCache;
 
@@ -356,7 +373,7 @@ class Base : public ClockedObject
         statistics::Scalar pfHitInWB;
 
         statistics::Scalar metadataAccesses;
-        
+
         statistics::Scalar lookupCorrect;
         statistics::Scalar lookupWrong;
         statistics::Scalar lookupCancelled;
@@ -364,12 +381,16 @@ class Base : public ClockedObject
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */
         statistics::Formula pfLate;
+        statistics::Vector stateNotifCount;
+
     } prefetchStats;
 
     /** Total prefetches issued */
     uint64_t issuedPrefetches;
     /** Total prefetches that has been useful */
     uint64_t usefulPrefetches;
+    uint64_t latePrefetches;
+    uint64_t uselessPrefetches;
 
     /** Registered mmu for address translations */
     BaseMMU * mmu;
@@ -390,6 +411,11 @@ class Base : public ClockedObject
     virtual void notifyFill(const PacketPtr &pkt)
     {}
 
+
+    /** Notify prefetcher of cache eviction */
+    virtual void notifyEvict(const BaseCache::DataUpdate &info)
+    {}
+
     virtual PacketPtr getPacket() = 0;
 
     virtual Tick nextPrefetchReadyTime() const = 0;
@@ -398,6 +424,7 @@ class Base : public ClockedObject
     prefetchUnused()
     {
         prefetchStats.pfUnused++;
+        uselessPrefetches++;
     }
 
     void
@@ -412,8 +439,16 @@ class Base : public ClockedObject
         prefetchStats.pfHitInCache++;
     }
 
-    void
-    pfHitInMSHR()
+    virtual void
+    pfLate(Addr addr)
+    {
+        prefetchStats.pfUsefulNotTimely++;
+        latePrefetches++;
+    }
+
+
+    virtual void
+    pfHitInMSHR(Addr addr)
     {
         prefetchStats.pfHitInMSHR++;
     }

@@ -458,9 +458,11 @@ BaseCache::recvTimingReq(PacketPtr pkt)
 
         handleTimingReqHit(pkt, blk, request_time);
     } else {
+		Addr blk_addr = pkt->getBlockAddr(blkSize);
+		MSHR *mshr = mshrQueue.findMatch(blk_addr, pkt->isSecure());
         handleTimingReqMiss(pkt, blk, forward_time, request_time);
 
-        ppMiss->notify(pkt);
+        if(!mshr || !prefetcher || (prefetcher && prefetcher->onDuplicateMiss))ppMiss->notify(pkt);
     }
 
     if (prefetcher) {
@@ -911,7 +913,7 @@ BaseCache::getNextQueueEntry()
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in a MSHR, "
                         "dropped.\n", pf_addr);
-                prefetcher->pfHitInMSHR();
+                prefetcher->pfHitInMSHR(pf_addr);
                 // free the request and packet
                 delete pkt;
             } else if (writeBuffer.findMatch(pf_addr, pkt->isSecure())) {

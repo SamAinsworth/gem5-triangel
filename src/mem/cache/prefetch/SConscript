@@ -31,7 +31,7 @@ Import('*')
 SimObject('Prefetcher.py', sim_objects=[
     'BasePrefetcher', 'MultiPrefetcher', 'QueuedPrefetcher',
     'StridePrefetcherHashedSetAssociative', 'StridePrefetcher',
-    'TriangelHashedSetAssociative', 'TriangelPrefetcher',
+    'TriangelHashedSetAssociative', 'TriangelPrefetcher', 'TetrahedrangelPrefetcher', 'XCMCPF',
     'SimpleTriangelHashedSetAssociative', 'SimpleTriangelPrefetcher',
     'TriageHashedSetAssociative', 'TriagePrefetcher',
     'TaggedPrefetcher', 'IndirectMemoryPrefetcher', 'SignaturePathPrefetcher',
@@ -61,3 +61,5 @@ Source('triangel.cc')
 Source('triage.cc')
 Source('MurmurHash2.c')
 Source('bloom.c')
+Source('xcmc.cc')
+Source('tetrahedrangel.cc')

@@ -86,8 +86,9 @@ class BaseTags : public ClockedObject
     System *system;
 
     /** Indexing policy */
+public:
     BaseIndexingPolicy *indexingPolicy;
-
+protected:
     /**
      * The number of tags that need to be touched to meet the warmup
      * percentage.
@@ -239,7 +240,7 @@ protected:
 
     virtual void clearSetWay(int set, int way)
     {
-         panic("This tag class does not implement way allocation limit!\n");   
+         panic("This tag class does not implement way allocation limit!\n");
     }
     /**
      * Get the way allocation mask limit.
@@ -267,12 +268,12 @@ protected:
 
         blk->invalidate();
     }
-    
+
     std::vector<CacheBlk*> badBlocks;
-    
+
     CacheBlk* getBadBlock() {
       if(badBlocks.empty()) return NULL;
-      
+
       CacheBlk* blk = badBlocks.back();
       badBlocks.pop_back();
       return blk;

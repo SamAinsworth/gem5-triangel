@@ -10,7 +10,7 @@ sudo umount specmnt
 rm -r specmnt
 cp spec_confs/x86_64_base.cfg SPEC/config
 cd SPEC
-. ./shrc   
-runspec --config=x86_64_base.cfg --action=build astar gcc mcf omnetpp soplex sphinx3 xalancbmk -I
-runspec --config=x86_64_base.cfg --action=run --size=ref astar gcc mcf omnetpp soplex sphinx3 xalancbmk -n 1 -I
+. ./shrc
+runspec --config=x86_64_base.cfg --action=build all -I
+runspec --config=x86_64_base.cfg --action=run --size=ref all -n 1 -I
 cd $BASE/run_scripts

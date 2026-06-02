@@ -70,7 +70,7 @@ Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
     } else {
         data = new uint8_t[req_size];
         Addr offset = pkt->req->getPaddr() - pkt->getAddr();
-        std::memcpy(data, &(pkt->getConstPtr<uint8_t>()[offset]), req_size);
+        if(pkt->hasData()) std::memcpy(data, &(pkt->getConstPtr<uint8_t>()[offset]), req_size);
     }
 }
 
@@ -92,9 +92,16 @@ Base::PrefetchListener::notify(const PacketPtr &pkt)
     }
 }
 
+void
+Base::PrefetchEvictListener::notify(const BaseCache::DataUpdate &info)
+{
+    if (info.newData.empty())
+        parent.notifyEvict(info);
+}
+
 Base::Base(const BasePrefetcherParams &p)
     : ClockedObject(p), listeners(), cache(nullptr), blkSize(p.block_size),
-      lBlkSize(floorLog2(blkSize)), onMiss(p.on_miss), onRead(p.on_read),
+      lBlkSize(floorLog2(blkSize)), onMiss(p.on_miss), onDuplicateMiss(p.on_duplicate_miss), onRead(p.on_read),
       onWrite(p.on_write), onData(p.on_data), onInst(p.on_inst), crossPages(p.cross_pages),
       requestorId(p.sys->getRequestorId(this)),
       pageBytes(p.page_bytes),
@@ -102,7 +109,7 @@ Base::Base(const BasePrefetcherParams &p)
       prefetchOnPfHit(p.prefetch_on_pf_hit),
       useVirtualAddresses(p.use_virtual_addresses),
       prefetchStats(this), issuedPrefetches(0),
-      usefulPrefetches(0), mmu(nullptr)
+      usefulPrefetches(0), latePrefetches(0), uselessPrefetches(0), mmu(nullptr)
 {
 }
 
@@ -128,13 +135,15 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     ADD_STAT(lookupCorrect, statistics::units::Count::get(),
         "lookup access correct"),
     ADD_STAT(lookupWrong, statistics::units::Count::get(),
-        "lookup access wrong"),             
+        "lookup access wrong"),
     ADD_STAT(lookupCancelled, statistics::units::Count::get(),
-        "lookup access wrong (detected)"),          
+        "lookup access wrong (detected)"),
     ADD_STAT(pfUnused, statistics::units::Count::get(),
              "number of HardPF blocks evicted w/o reference"),
     ADD_STAT(pfUseful, statistics::units::Count::get(),
         "number of useful prefetch"),
+    ADD_STAT(pfUsefulNotTimely, statistics::units::Count::get(),
+        "number of useful late prefetch"),
     ADD_STAT(pfUsefulButMiss, statistics::units::Count::get(),
         "number of hit on prefetch but cache block is not in an usable "
         "state"),
@@ -149,19 +158,26 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     ADD_STAT(pfHitInWB, statistics::units::Count::get(),
         "number of prefetches hit in the Write Buffer"),
     ADD_STAT(pfLate, statistics::units::Count::get(),
-        "number of late prefetches (hitting in cache, MSHR or WB)")
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(timeliness, statistics::units::Count::get(),
+        "timeliness of the prefetcher"),
+    ADD_STAT(stateNotifCount, statistics::units::Count::get(),
+         "notifications received per prefetcher state")
+
 {
     using namespace statistics;
 
     pfUnused.flags(nozero);
+    stateNotifCount.init(16);
 
     accuracy.flags(total);
-    accuracy = pfUseful / pfIssued;
+    accuracy = (pfUseful+pfUsefulNotTimely) / (pfUseful+pfUnused+pfUsefulNotTimely);
 
     coverage.flags(total);
-    coverage = pfUseful / (pfUseful + demandMshrMisses);
-
-    pfLate = pfHitInCache + pfHitInMSHR + pfHitInWB;
+    coverage = (pfUseful+pfUsefulNotTimely) / (pfUseful+pfUsefulNotTimely + demandMshrMisses);
+    timeliness.flags(total);
+    timeliness = pfUseful /(pfUseful+pfUsefulNotTimely);
+    pfLate = pfHitInCache + pfHitInMSHR + pfHitInWB + pfUsefulNotTimely;
 }
 
 bool
@@ -295,6 +311,8 @@ Base::regProbeListeners()
                                                  false));
         listeners.push_back(new PrefetchListener(*this, pm, "Hit", false,
                                                  false));
+        listeners.push_back(new PrefetchEvictListener(*this, pm,
+                                                 "Data Update"));
     }
 }
 
@@ -310,6 +328,7 @@ Base::addMMU(BaseMMU *m)
 {
     fatal_if(mmu != nullptr, "Only one MMU can be registered");
     mmu = m;
+    printf("mmu %p\n", mmu);
 }
 
 } // namespace prefetch

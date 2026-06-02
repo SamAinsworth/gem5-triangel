@@ -71,12 +71,12 @@ class BaseIndexingPolicy : public SimObject
      */
     const unsigned assoc;
 
-  protected:
+
     /**
      * The number of sets in the cache.
      */
     const uint32_t numSets;
-
+  protected:
     /**
      * The amount to shift the address to get the set.
      */

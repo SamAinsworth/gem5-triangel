@@ -71,6 +71,7 @@ class BasePrefetcher(ClockedObject):
     block_size = Param.Int(Parent.cache_line_size, "Block size in bytes")
 
     on_miss = Param.Bool(False, "Only notify prefetcher on misses")
+    on_duplicate_miss = Param.Bool(True, "Notify on duplicate misses")
     on_read = Param.Bool(True, "Notify prefetcher on reads")
     on_write = Param.Bool(True, "Notify prefetcher on writes")
     on_data = Param.Bool(True, "Notify prefetcher on data accesses")
@@ -712,7 +713,9 @@ class TriagePrefetcher(QueuedPrefetcher):
     store_unreliable = Param.Bool(True, "Store history for unreliable PCs")
     cachetags = Param.BaseTags(Parent.tags, "Cache we're storing metadata in")
     should_rearrange = Param.Bool(True, "Should rearrange on index change")
-    lookahead_two = Param.Bool(False, "Add Triangel-style Lookahead-2 (unconditionally)")    
+    lookahead_two = Param.Bool(
+        False, "Add Triangel-style Lookahead-2 (unconditionally)"
+    )
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
 
     degree = Param.Int(1, "Number of prefetches to generate")
@@ -792,9 +795,9 @@ class TriangelPrefetcher(QueuedPrefetcher):
     should_rearrange = Param.Bool(True, "Should rearrange on index change")
     use_hawkeye = Param.Bool(False, "Add hawkeye after the sample cache")
     use_reuse = Param.Bool(True, "Use ReuseConf")
-    use_pattern = Param.Bool(True, "Use PatternConf") 
+    use_pattern = Param.Bool(True, "Use PatternConf")
     use_pattern2 = Param.Bool(True, "Use Pattern2Conf")
-    use_mrb = Param.Bool(True, "Use ReuseBuffer")    
+    use_mrb = Param.Bool(True, "Use ReuseBuffer")
     timed_scs = Param.Bool(True, "Use timed SCS")
     perfbias = Param.Bool(False, "Bias away from energy efficiency")
     smallduel = Param.Bool(False, "Use small set dueller")
@@ -803,7 +806,9 @@ class TriangelPrefetcher(QueuedPrefetcher):
     degree = Param.Int(4, "Maximum number of prefetches to generate")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
 
-    sctags = Param.BaseTags(Parent.tags, "Cache we check for second-chance sampling")
+    sctags = Param.BaseTags(
+        Parent.tags, "Cache we check for second-chance sampling"
+    )
     lookup_assoc = Param.Unsigned(0, "Associativity of the lookup table")
     lookup_offset = Param.Unsigned(11, "Offset of the lookup table")
     training_unit_assoc = Param.Unsigned(
@@ -883,7 +888,9 @@ class TriangelPrefetcher(QueuedPrefetcher):
         FIFORP(), "Replacement policy of the Prefetched cache"
     )
 
-    secondchance_assoc = Param.Int(2, "Associativity of the Second Chance Sampler")
+    secondchance_assoc = Param.Int(
+        2, "Associativity of the Second Chance Sampler"
+    )
     secondchance_entries = Param.MemorySize(
         "64", "Number of entries of the Second Chance Sampler"
     )
@@ -898,12 +905,12 @@ class TriangelPrefetcher(QueuedPrefetcher):
     secondchance_replacement_policy = Param.BaseReplacementPolicy(
         FIFORP(), "Replacement policy of the Second Chance Sampler"
     )
-    
+
+
 class SimpleTriangelHashedSetAssociative(SetAssociative):
     type = "SimpleTriangelHashedSetAssociative"
     cxx_class = "gem5::prefetch::SimpleTriangelHashedSetAssociative"
     cxx_header = "mem/cache/prefetch/simpletriangel.hh"
-    
 
 
 class SimpleTriangelPrefetcher(QueuedPrefetcher):
@@ -925,7 +932,9 @@ class SimpleTriangelPrefetcher(QueuedPrefetcher):
     degree = Param.Int(4, "Maximum number of prefetches to generate")
     cache_delay = Param.Unsigned(25, "Time to access L3 cache")
 
-    sctags = Param.BaseTags(Parent.tags, "Cache we check for second-chance sampling")
+    sctags = Param.BaseTags(
+        Parent.tags, "Cache we check for second-chance sampling"
+    )
     training_unit_assoc = Param.Unsigned(
         16, "Associativity of the training unit"
     )
@@ -1003,7 +1012,9 @@ class SimpleTriangelPrefetcher(QueuedPrefetcher):
         FIFORP(), "Replacement policy of the Prefetched cache"
     )
 
-    secondchance_assoc = Param.Int(2, "Associativity of the Second Chance Sampler")
+    secondchance_assoc = Param.Int(
+        2, "Associativity of the Second Chance Sampler"
+    )
     secondchance_entries = Param.MemorySize(
         "64", "Number of entries of the Second Chance Sampler"
     )
@@ -1017,4 +1028,163 @@ class SimpleTriangelPrefetcher(QueuedPrefetcher):
     )
     secondchance_replacement_policy = Param.BaseReplacementPolicy(
         FIFORP(), "Replacement policy of the Second Chance Sampler"
-    )    
+    )
+
+
+class TetrahedrangelPrefetcher(QueuedPrefetcher):
+    type = "TetrahedrangelPrefetcher"
+    cxx_class = "gem5::prefetch::TetrahedrangelPrefetcher"
+    cxx_header = "mem/cache/prefetch/tetrahedrangel.hh"
+
+    use_virtual_addresses = False
+    on_read = True
+    on_write = True
+    on_data = True
+    on_inst = False
+    on_miss = True
+    prefetch_on_access = False
+    prefetch_on_pf_hit = True  # TODO: check these!
+    cross_pages = True
+    cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
+    always_prefetch = Param.Bool(
+        False,
+        "Prefetch and store regardless of samplers",
+    )
+    aggressive = Param.Bool(
+        False,
+        "Aggressive PatternConf and sizing",
+    )
+    no_samePC = Param.Bool(
+        False,
+        "No SamePC patternconf",
+    )
+    no_diffPC = Param.Bool(
+        False,
+        "No DiffPC patternconf",
+    )
+    pc_training = Param.Bool(
+        True,
+        "Train-table chosen per-pc",
+    )
+    use_remap = Param.Bool(True, "Use Remap")
+    use_scatter = Param.Bool(True, "Use Scatter")
+
+    use_sleep = Param.Bool(True, "Use Sleep Mode")
+    ignore_ptag = Param.Bool(False, "Ignore ptag")
+
+    storage_entries = Param.MemorySize(
+        "32768", "Number of Tetrahedrangel storage entries"
+    )
+    sctags = Param.BaseTags(
+        Parent.tags, "Cache we check for second-chance sampling"
+    )
+    storage_assoc = Param.Int(
+        16, "Associativity of the Tetrahedrangel storage table"
+    )
+    ghost_address_map_cache_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.storage_assoc // 2,
+            size=Parent.storage_entries * 8,
+        ),
+        "Indexing policy of the PC table",
+    )
+    ghost_address_map_cache_replacement_policy = Param.BaseReplacementPolicy(
+        RRIPRP(), "Replacement policy of the Markov table"
+    )
+    storage_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.storage_assoc,
+            size=Parent.storage_entries,
+        ),
+        "Indexing policy of active generation table",
+    )
+    storage_replacement_policy = Param.BaseReplacementPolicy(
+        BRRIPRP(), "Replacement policy of active generation table"
+    )
+    counter_unit_entries = Param.MemorySize(
+        "512", "Number of entries of the counter unit"
+    )
+    secondchance_assoc = Param.Int(
+        2, "Associativity of the Second Chance Sampler"
+    )
+    secondchance_entries = Param.MemorySize(
+        "64", "Number of entries of the Second Chance Sampler"
+    )
+    secondchance_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.secondchance_assoc,
+            size=Parent.secondchance_entries,
+        ),
+        "Indexing policy of the Second Chance Sampler",
+    )
+    secondchance_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the Second Chance Sampler"
+    )
+    training_table_size = Param.Int(8, "Training Table size")
+    remap_assoc = Param.Int(8, "Associativity of the Metadata Reuse Buffer")
+    remap_entries = Param.MemorySize(
+        "128", "Number of entries of the Metadata Reuse Buffer"
+    )
+    remap_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.remap_assoc,
+            size=Parent.remap_entries,
+        ),
+        "Indexing policy of the Prefetched cache",
+    )
+    remap_replacement_policy = Param.BaseReplacementPolicy(
+        FIFORP(), "Replacement policy of the Remap"
+    )
+    demap_assoc = Param.Int(8, "Associativity of the Metadata Reuse Buffer")
+    demap_entries = Param.MemorySize(
+        "128", "Number of entries of the Metadata Reuse Buffer"
+    )
+    demap_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.demap_assoc,
+            size=Parent.demap_entries,
+        ),
+        "Indexing policy of the Prefetched cache",
+    )
+    demap_replacement_policy = Param.BaseReplacementPolicy(
+        FIFORP(), "Replacement policy of the Remap"
+    )
+
+
+class XCMCPF(QueuedPrefetcher):
+    type = "XCMCPF"
+    cxx_class = "gem5::prefetch::XCMCPF"
+    cxx_header = "mem/cache/prefetch/xcmc.hh"
+
+    use_virtual_addresses = False
+    on_read = True
+    on_write = True
+    on_data = True
+    on_inst = False
+    on_miss = True
+    prefetch_on_access = False
+    prefetch_on_pf_hit = True  # TODO: check these!
+    cross_pages = True
+    fix_indexing = Param.Bool(False, "Fix Indexing Bug")
+
+    cachetags = Param.BaseTags(Parent.tags, "Cache we belong to")
+    storage_entries = Param.MemorySize(
+        "32768", "Number of CMC storage entries"
+    )
+    storage_assoc = Param.Int(16, "Associativity of the CMC storage table")
+    storage_indexing_policy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            entry_size=1,
+            assoc=Parent.storage_assoc,
+            size=Parent.storage_entries,
+        ),
+        "Indexing policy of active generation table",
+    )
+    storage_replacement_policy = Param.BaseReplacementPolicy(
+        BRRIPRP(), "Replacement policy of active generation table"
+    )
